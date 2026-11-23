@@ -81,6 +81,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **置顶**：项目行第一个按钮 `📌`（`IconPinOutlineRegular`）切换置顶；置顶的项目单独收在列表最上方的「置顶」分组里，普通项目在后面，顺序由 `/project/pin` 持久化
 - **拖拽排序**：项目行可拖拽，拖到另一项目行的上半区插到它前面、下半区插到它后面（拖拽时显示 2px 主色指示线，源行半透明）；跨分组拖拽会先继承目标项目的置顶状态再重排，顺序由 `/project/reorder` 持久化（只提交显示顺序，未列出的项目原样保留）
 - **会话导出**：会话行 `⇩` 导出单个会话、子工作区行 `⇩` 导出该工作区的全部会话、项目行 `⇩` 导出整个项目（含所有子工作区）的会话；服务端读 `sessionQuery.readSession` 汇成 Markdown（用户/助手消息、工具调用与结果，跳过 system/developer），文件名 `标签-会话导出-YYYYMMDD.md`，浏览器直接下载
+- **临时会话**：标题栏的 `◷` 按钮直接开一个临时会话——在系统临时目录下建 `dsh-temp-<时间戳>` 并注册成工作区，会话立刻打开；临时工作区单独收在侧边栏的「临时会话」分组里，用完点行尾删除即可（只删工作区，不删项目）
 - **叶子项目**：没有子工作区的项目直接把自己注册成一个 Workspace，侧边栏里点它就能开会话，不需要先扫描
 - **别名可留空**：别名只是侧边栏上的补充说明，留空就显示项目名称本身
 - **当前会话高亮 + 自动滚动**：正在用的会话在侧边栏里始终有品牌色底 + 左侧 2px 竖条 + 品牌色标题；打开/切换会话时侧边栏自动滚到它，被折叠的工作区与目录、以及超过 6 条的会话列表都会为它自动展开
@@ -108,6 +109,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 | `/dsh-project-workspaces/project/pin` | POST | `{projectId, pinned?}` 置顶/取消置顶（`pinned` 省略时取反），返回 `{ok, project, state}` |
 | `/dsh-project-workspaces/project/reorder` | POST | `{projectIds[]}` 按给定顺序重排项目，未列出的项目追加在后面，返回 `{ok, state}` |
 | `/dsh-project-workspaces/project/auto-group` | POST | `{minChildren=2}` 按父目录把现有 Workspace 自动归组为项目 |
+| `/dsh-project-workspaces/temp-session` | POST | 在系统临时目录建 `dsh-temp-<时间戳>` 并注册工作区，返回 `{ok, workspaceId, path, title, state}` |
 | `/dsh-project-workspaces/export` | POST | `{label, sessionIds[]}` 把若干会话渲染成 Markdown 返回 `{ok, filename, count, sessions[], content}`（会话由宿主 `sessionQuery` 读取） |
 | `/dsh-project-workspaces/open` | POST | `{path}` 结束后台进程打开该目录（`explorer.exe` / `open` / `xdg-open`） |
 | `/dsh-project-workspaces/project/remove` | POST | `{projectId}` 只把项目移出树，Workspace 会话历史保留 |
@@ -134,7 +136,7 @@ DSH 原生 Workspace 不能嵌套：会话 cwd 必须等于 Workspace 路径，�
 
 ```
 client/client.js      客户端半边：侧边栏（替换原生工作区区域）、新增工作区弹窗、编辑弹窗、设置面板
-lib/index.js          宿主半边：project-workspaces.json 持久化 + 14 条 HTTP 路由（含导出 / 置顶 / 拖拽排序）
+lib/index.js          宿主半边：project-workspaces.json 持久化 + 15 条 HTTP 路由（含临时会话 / 导出 / 置顶 / 拖拽排序）
 cordis.patch.yml      Loader patch（insert project-workspaces）
 ```
 

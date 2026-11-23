@@ -321,6 +321,18 @@ window.__ModuleLoader__.load({
           setBusy(false)
         }
       }
+      async function newTempSession() {
+        if (busy) return
+        setBusy(true); setError('')
+        try {
+          const body = await postJson(API.tempSession, {})
+          await loadTree()
+          notifyChanged()
+          if (body && body.workspaceId && uiWorkspace && typeof uiWorkspace.startSession === 'function') {
+            await uiWorkspace.startSession(body.workspaceId)
+          }
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
       async function loadTree() {
         try {
           const response = await fetch(STATE_URL, { credentials: 'same-origin' })
@@ -965,6 +977,7 @@ window.__ModuleLoader__.load({
         return h('div', { className: 'sbw sbw-rail' },
           h('div', { className: 'sbw-hd' },
             h('button', { className: 'sbw-ibtn', title: '展开工作区', onClick: function () { try { expandSidebar() } catch (err) { void err } } }, glyph('IconPanelLeftOutlineRegular', 16, '▤')),
+            h('button', { className: 'sbw-ibtn', title: '新建临时会话', onClick: newTempSession }, glyph('IconClockOutlineRegular', 16, '◷')),
             h('button', { className: 'sbw-ibtn', title: '新增工作区', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋'))
           )
         )
@@ -978,6 +991,9 @@ window.__ModuleLoader__.load({
           return sessionIdsOf(ws).some(matchesSession)
         })
         : loose
+      const isTempWs = function (ws) { return String(ws.title || '').indexOf('临时会话') === 0 }
+      const tempVisible = looseVisible.filter(isTempWs)
+      const otherLoose = looseVisible.filter(function (ws) { return !isTempWs(ws) })
       const empty = !hasProjects && !looseVisible.length && !(legacy.length && !tree)
       return h('div', { className: 'sbw sbw-wide' },
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
@@ -1007,6 +1023,9 @@ window.__ModuleLoader__.load({
               : null,
             searchOpen
               ? null
+              : h('button', { className: 'sbw-ibtn', title: '新建临时会话', onClick: newTempSession }, glyph('IconClockOutlineRegular', 16, '◷')),
+            searchOpen
+              ? null
               : h('button', { className: 'sbw-ibtn', title: '新增工作区', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋')),
             searchOpen
               ? null
@@ -1023,8 +1042,14 @@ window.__ModuleLoader__.load({
               h('div', { className: 'sbw-sect-head' }, '置顶'),
               pinnedProjects.map(projectNode)
             ) : null,
+            tempVisible.length ? h('div', { className: 'sbw-group sbw-sect' },
+              h('div', { className: 'sbw-sect-head' }, '临时会话'),
+              tempVisible.map(function (ws) {
+                return workspaceNode(ws, ws.title || baseName(ws.path), 'loose:' + String(ws.workspaceId), 0)
+              })
+            ) : null,
             normalProjects.length ? h('div', { className: 'sbw-group' }, normalProjects.map(projectNode)) : null,
-            looseVisible.length ? h('div', { className: 'sbw-loose' }, looseVisible.map(function (ws) {
+            otherLoose.length ? h('div', { className: 'sbw-loose' }, otherLoose.map(function (ws) {
               return workspaceNode(ws, ws.title || baseName(ws.path), 'loose:' + String(ws.workspaceId), 0)
             })) : null,
             !tree && legacy.length ? h('div', { className: 'sbw-hint' }, '（项目接口不可用，已回退为按 Workspace 标题归组）') : null,
@@ -1059,6 +1084,7 @@ window.__ModuleLoader__.load({
       projectPin: '/dsh-project-workspaces/project/pin',
       projectReorder: '/dsh-project-workspaces/project/reorder',
       exportSessions: '/dsh-project-workspaces/export',
+      tempSession: '/dsh-project-workspaces/temp-session',
       open: '/dsh-project-workspaces/open',
       autoGroup: '/dsh-project-workspaces/project/auto-group'
     }
