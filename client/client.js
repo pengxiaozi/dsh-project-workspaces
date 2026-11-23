@@ -13,6 +13,17 @@ window.__ModuleLoader__.load({
     const CHANGED_EVENT = 'dsh-project-workspaces:changed'
     // 一个工作区下默认最多铺 6 行会话，多出来的折成「还有 N 个会话」
     const SESSION_PREVIEW = 6
+    // 项目色标：空串 = 默认色；其它值直接写进 style.color
+    const PROJECT_COLORS = [
+      { value: '', label: '默认' },
+      { value: '#4d6bfe', label: '品牌蓝' },
+      { value: '#2ea043', label: '绿' },
+      { value: '#c98a00', label: '琥珀' },
+      { value: '#d14343', label: '红' },
+      { value: '#8b5cf6', label: '紫' },
+      { value: '#0ea5e9', label: '青' },
+      { value: '#ec4899', label: '粉' },
+    ]
     // Fluent 图标来自原生 primitives；动态插件加载时机不确定，失败时回退内联 SVG。
     let primitives = null
     try { primitives = require('@deepseek-ai/dsh-client-ui-primitives') || null } catch (err) { primitives = null }
@@ -42,6 +53,17 @@ window.__ModuleLoader__.load({
       '.sbw-search input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.sbw-scroll{flex:1;min-height:0;display:flex;flex-direction:column}',
       '.sbw-wide .sbw-scroll{display:block;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;scrollbar-gutter:stable}',
+      '.sbw-skel{padding:2px 8px}',
+      '.sbw-skel-row{display:flex;align-items:center;gap:8px;height:32px;padding-left:calc(var(--dsh-sidebar-row-padding,12px) - 3px)}',
+      '.sbw-skel-ico{flex:none;width:16px;height:16px;border-radius:var(--dsw-radius-xs,4px);background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 8%,transparent);animation:sbw-pulse 1.2s ease-in-out infinite}',
+      '.sbw-skel-line{height:10px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 8%,transparent);animation:sbw-pulse 1.2s ease-in-out infinite}',
+      '@keyframes sbw-pulse{0%,100%{opacity:.55}50%{opacity:1}}',
+      '.sbw-empty-state{display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 18px;text-align:center}',
+      '.sbw-empty-ico{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin-bottom:2px;border-radius:var(--dsw-radius-lg,16px);background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 6%,transparent);color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-empty-title{font-size:13px;line-height:20px;font-weight:500;color:var(--dsw-alias-label-primary)}',
+      '.sbw-empty-desc{max-width:240px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-empty-btn{display:inline-flex;align-items:center;gap:4px;height:28px;margin-top:6px;padding:0 12px;border:none;border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-button-primary-fill,#4d6bfe);color:var(--dsw-alias-label-on-color,#fff);font-family:inherit;font-size:12px;cursor:pointer}',
+      '.sbw-empty-btn:hover{background:var(--dsw-alias-button-primary-hover,var(--dsw-alias-button-primary-fill,#3f5bee))}',
       '.sbw-list{flex:1;min-height:0;padding-bottom:16px}',
       '.sbw-wide .sbw-scroll::-webkit-scrollbar{width:6px}',
       '.sbw-wide .sbw-scroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 14%,transparent);border-radius:999px}',
@@ -306,6 +328,7 @@ window.__ModuleLoader__.load({
           alias: project.alias || '',
           tags: project.tags || [],
           pinned: project.pinned === true,
+          color: project.color || '',
           selfWs: selfWs || null,
           children: children,
         }
@@ -329,6 +352,7 @@ window.__ModuleLoader__.load({
       const [openChildren, setOpenChildren] = useState({})
       const [moreOpen, setMoreOpen] = useState({})
       const [error, setError] = useState('')
+      const [loaded, setLoaded] = useState(false)
       const [renaming, setRenaming] = useState('')
       const [renameValue, setRenameValue] = useState('')
       const [busy, setBusy] = useState(false)
@@ -395,6 +419,8 @@ window.__ModuleLoader__.load({
         } catch (err) {
           setTree(null)
           setError(String(err && err.message ? err.message : err))
+        } finally {
+          setLoaded(true)
         }
       }
       useEffect(function () { loadTree() }, [])
@@ -772,7 +798,7 @@ window.__ModuleLoader__.load({
         }
         if (options.drag) Object.assign(shellProps, options.drag)
         return h('div', shellProps,
-          h('span', { className: 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : '') }, options.icon || FolderIcon({ open: options.open })),
+          h('span', { className: 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : ''), style: options.color ? { color: options.color } : undefined }, options.icon || FolderIcon({ open: options.open })),
           h('span', { className: 'sbw-slot sbw-chev' }, ChevronIcon({ open: options.open })),
           options.text,
           options.actions
@@ -1100,6 +1126,7 @@ window.__ModuleLoader__.load({
               className: projectRowClass(project, 'sbw-row sbw-ws sbw-leaf'),
               title: ws.path,
               open: open,
+              color: project.color,
               style: { '--sbw-indent': '0px' },
               drag: projectDragProps(project),
               onClick: function () { toggleRoot(project.id) },
@@ -1126,6 +1153,7 @@ window.__ModuleLoader__.load({
             className: projectRowClass(project, 'sbw-row sbw-proj'),
             title: project.path,
             open: open,
+            color: project.color,
             drag: projectDragProps(project),
             onClick: function () { if (!isRenaming) toggleRoot(project.id) },
             text: isRenaming
@@ -1271,10 +1299,20 @@ window.__ModuleLoader__.load({
           : null,
         h('div', { className: 'sbw-scroll', ref: scrollRef },
           h('div', { className: 'sbw-list' },
-            empty ? h('div', { className: 'sbw-empty sbw-empty-page' },
-              tagFilter
-                ? '没有带「' + tagFilter + '」标签的项目。再点一次上方的标签可以取消筛选。'
-                : '还没有工作区。点右上角 ＋ 选择目录、命名项目并勾选子目录，即可把项目拆成多个独立子工作区。') : null,
+            !loaded ? h('div', { className: 'sbw-skel' }, [0, 1, 2, 3].map(function (index) {
+              return h('div', { key: index, className: 'sbw-skel-row' },
+                h('span', { className: 'sbw-skel-ico' }),
+                h('span', { className: 'sbw-skel-line', style: { width: (56 + ((index * 17) % 30)) + '%' } }))
+            })) : null,
+            loaded && empty ? h('div', { className: 'sbw-empty-state' },
+              h('div', { className: 'sbw-empty-ico' }, glyph('IconFolderOpenRegular', 26, '▤')),
+              h('div', { className: 'sbw-empty-title' }, tagFilter ? '没有带「' + tagFilter + '」标签的项目' : '还没有工作区'),
+              h('div', { className: 'sbw-empty-desc' }, tagFilter
+                ? '再点一次上方的标签可以取消筛选。'
+                : '选一个项目根目录并命名，勾选要独立开的子目录，就能拆成多个工作区。'),
+              tagFilter ? null : h('button', { className: 'sbw-empty-btn', onClick: function () { openCreateDialog() } },
+                glyph('IconPlusOutlineRegular', 14, '＋'), '新增工作区')
+            ) : null,
             !empty && !hasProjects && !tagFilter ? h('div', { className: 'sbw-hint' }, '提示：点 ＋ 新建项目，或到「设置 → 项目工作区」点「按父目录自动归组」。') : null,
             pinnedProjects.length ? h('div', { className: 'sbw-group sbw-sect' },
               h('div', { className: 'sbw-sect-head' }, '置顶'),
@@ -1403,6 +1441,12 @@ window.__ModuleLoader__.load({
       '.pw-tree-rel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
       '.pw-tree-foot{display:flex;align-items:center;gap:10px;margin-top:4px}' +
       '.pw-link{border:none;background:transparent;padding:0;color:var(--dsw-alias-brand-primary,#4d6bfe);font-size:12px;line-height:18px;cursor:pointer}' +
+      '.pw-colors{display:flex;align-items:center;gap:8px;flex-wrap:wrap}' +
+      '.pw-color{width:22px;height:22px;padding:0;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.24));border-radius:999px;cursor:pointer;transition:transform 120ms ease,box-shadow 120ms ease}' +
+      '.pw-color:hover{transform:scale(1.08)}' +
+      '.pw-color.on{box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1,#fff),0 0 0 4px color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 60%,transparent)}' +
+      '.pw-color-none{background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 8%,transparent);position:relative}' +
+      '.pw-color-none::after{content:"";position:absolute;left:5px;right:5px;top:50%;height:1px;background:var(--dsw-alias-label-tertiary);transform:rotate(-45deg)}' +
       '.pw-footer{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}' +
       '.pw-footer-actions{display:flex;align-items:center;gap:8px}'
     const CSS = SIDEBAR_CSS + DIALOG_CSS
@@ -1657,6 +1701,7 @@ window.__ModuleLoader__.load({
       const [name, setName] = useState(project.name || project.root || '')
       const [alias, setAlias] = useState(child ? (child.alias || '') : (project.alias || ''))
       const [tags, setTags] = useState(((child ? child.tags : project.tags) || []).join(', '))
+      const [color, setColor] = useState(project.color || '')
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
       const target = child ? child.path : project.path
@@ -1668,17 +1713,19 @@ window.__ModuleLoader__.load({
       }
       async function save() {
         if (busy) return
-        if (!child && !String(name).trim()) { setError('项目名称不能为空'); return }
+        if (!String(name).trim()) { setError('项目名称不能为空'); return }
         setBusy(true); setError('')
         try {
           const payload = { projectId: project.id }
+          // 项目名在这里始终可以改（编辑子工作区时也能顺手改父项目名）
+          payload.name = String(name).trim()
           if (child) {
             // 只改这个子目录自己的别名/标签，绝不能带到项目上（否则整个项目所有目录显示同一个别名）
             payload.children = [{ path: child.path, alias: alias, tags: parsedTags }]
           } else {
-            payload.name = String(name).trim()
             payload.alias = alias
             payload.tags = parsedTags
+            payload.color = color
           }
           await postJson(API.projectUpdate, payload)
           notifyChanged()
@@ -1702,14 +1749,28 @@ window.__ModuleLoader__.load({
               h('button', { className: 'pw-btn', onClick: openFolder }, glyph('IconFolderOpenRegular', 16), '打开目录')
             )
           ),
-          child ? null : h('div', { className: 'pw-field' },
+          h('div', { className: 'pw-field' },
             h('label', { className: 'pw-label' }, '项目名称'),
             h('input', {
               className: 'pw-input',
               value: name,
               placeholder: '例如 public',
               onChange: function (e) { setName(e.target.value) },
-            })
+            }),
+            child ? h('div', { className: 'pw-muted' }, '改这里会重命名整个项目；子工作区本身的名称取自目录名。') : null
+          ),
+          child ? null : h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, '项目颜色'),
+            h('div', { className: 'pw-colors' }, PROJECT_COLORS.map(function (item) {
+              return h('button', {
+                key: item.value || 'default',
+                type: 'button',
+                className: 'pw-color' + (color === item.value ? ' on' : '') + (item.value ? '' : ' pw-color-none'),
+                title: item.label,
+                style: item.value ? { background: item.value } : undefined,
+                onClick: function () { setColor(item.value) },
+              })
+            }))
           ),
           h('div', { className: 'pw-field' },
             h('label', { className: 'pw-label' }, '别名'),
