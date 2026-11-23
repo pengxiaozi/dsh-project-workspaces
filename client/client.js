@@ -211,6 +211,36 @@ window.__ModuleLoader__.load({
         try { listener(payload) } catch (err) { void err }
       }
     }
+    // 会话完成提示总线：侧边栏监听会话状态，完成时给 shell.overlay 里的提示条推一条消息
+    const completionListeners = new Set()
+    function notifyCompletion(payload) {
+      completionListeners.forEach(function (fn) {
+        try { fn(payload) } catch (err) { /* 单个监听器出错不影响其它 */ }
+      })
+    }
+    function useCompletionToasts() {
+      const [items, setItems] = useState([])
+      useEffect(function () {
+        function listener(payload) {
+          setItems(function (prev) {
+            const rest = prev.filter(function (item) { return item.sessionId !== payload.sessionId })
+            return rest.concat([payload]).slice(-3)
+          })
+        }
+        completionListeners.add(listener)
+        return function () { completionListeners.delete(listener) }
+      }, [])
+      useEffect(function () {
+        if (!items.length) return undefined
+        const timers = items.map(function (item) {
+          return setTimeout(function () {
+            setItems(function (prev) { return prev.filter(function (next) { return next.key !== item.key }) })
+          }, 6000)
+        })
+        return function () { timers.forEach(clearTimeout) }
+      }, [items])
+      return [items, setItems]
+    }
     function useEditDialogSeed() {
       const [seed, setSeed] = useState(null)
       useEffect(function () {
@@ -451,6 +481,34 @@ window.__ModuleLoader__.load({
         const summary = summaries[id]
         return sessionLabel(summary).toLowerCase().indexOf(needle) >= 0
       }
+      // 会话完成提示：会话状态从「进行中」变为「完成」时弹一条提示（点击可打开该会话）
+      const useSessionStatus = props.useSessionStatus
+      let statusMap = null
+      try {
+        statusMap = typeof useSessionStatus === 'function' ? useSessionStatus(function (map) { return map }) : null
+      } catch (err) { statusMap = null }
+      const statusSeen = React.useRef({})
+      useEffect(function () {
+        if (!statusMap) return
+        const prev = statusSeen.current
+        const next = {}
+        Object.keys(statusMap).forEach(function (id) {
+          const entry = statusMap[id]
+          const state = entry && entry.state
+          if (!state) return
+          next[id] = state
+          const before = prev[id]
+          if (!before || before === state) return
+          const summary = summaries[id]
+          const title = summary ? sessionLabel(summary) : '会话 ' + String(id).slice(0, 8)
+          if (state === 'done') {
+            notifyCompletion({ key: id + ':' + Date.now(), sessionId: id, title: title, kind: 'done' })
+          } else if (state === 'warning') {
+            notifyCompletion({ key: id + ':' + Date.now(), sessionId: id, title: title, kind: 'warning' })
+          }
+        })
+        statusSeen.current = next
+      }, [statusMap])
       function sessionIdsOf(ws) {
         const own = (ws && ws.sessionIds) || []
         if (own.length) return own
@@ -990,7 +1048,15 @@ window.__ModuleLoader__.load({
       '.pw-project{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:var(--dsw-radius-md,12px);border:0.5px solid var(--dsw-alias-border-l2)}' +
       '.pw-project-head{display:flex;align-items:center;justify-content:space-between;gap:10px}' +
       '.pw-child{display:flex;align-items:center;gap:8px;margin-left:12px;padding:4px 8px;border-radius:var(--dsw-radius-sm,8px);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}' +
-      '.pw-modal{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.28))}' +
+    '.pw-toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:2147483000;pointer-events:none}' +
+    '.pw-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:8px;min-width:220px;max-width:320px;padding:10px 12px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,12px);background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 8px 24px rgba(0,0,0,.16);cursor:pointer}' +
+    '.pw-toast:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.08))}' +
+    '.pw-toast-dot{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;color:var(--dsw-alias-state-success-primary,#2f9e44)}' +
+    '.pw-toast-dot.warn{color:var(--dsw-alias-state-warn-primary,#d9480f)}' +
+    '.pw-toast-body{display:flex;flex-direction:column;gap:2px;min-width:0}' +
+    '.pw-toast-title{font-size:13px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.pw-toast-sub{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
+    '.pw-modal{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.28))}' +
       '.pw-modal-card{display:flex;flex-direction:column;gap:14px;width:min(560px,calc(100vw - 48px));max-height:min(80vh,720px);box-sizing:border-box;padding:18px 20px 16px;border-radius:var(--dsw-radius-xl,20px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2);box-shadow:var(--dsw-elevation-prominent,0 12px 32px rgba(0,0,0,.18));font-family:var(--dsw-font-family,inherit)}' +
       '.pw-modal-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}' +
       '.pw-modal-title{margin:0 0 2px;font-size:16px;line-height:22px;font-weight:600}' +
@@ -1265,8 +1331,9 @@ window.__ModuleLoader__.load({
         }).catch(function (err) { if (alive) setEditData({ error: errorText(err) }) })
         return function () { alive = false }
       }, [editSeed])
+      let dialog = null
       if (seed) {
-        return h(CreateDialog, {
+        dialog = h(CreateDialog, {
           services: props.services,
           title: seed.root ? '添加子工作区' : '新增工作区',
           initialRoot: seed.root || '',
@@ -1274,11 +1341,9 @@ window.__ModuleLoader__.load({
           onClose: function () { setSeed(null) },
           onCreated: function () { setSeed(null) }
         })
-      }
-      if (editSeed) {
-        if (!editData) return null
-        if (editData.error) {
-          return h('div', { className: 'pw-modal', onClick: function () { setEditSeed(null) } },
+      } else if (editSeed) {
+        if (editData && editData.error) {
+          dialog = h('div', { className: 'pw-modal', onClick: function () { setEditSeed(null) } },
             h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
               h('div', { className: 'pw-modal-head' },
                 h('div', null, h('h3', { className: 'pw-modal-title' }, '编辑目录')),
@@ -1287,15 +1352,46 @@ window.__ModuleLoader__.load({
               h('div', { className: 'pw-msg err' }, editData.error)
             )
           )
+        } else if (editData) {
+          dialog = h(EditDialog, {
+            project: editData.project,
+            child: editData.child,
+            onClose: function () { setEditSeed(null) },
+            onSaved: function () { setEditSeed(null) }
+          })
         }
-        return h(EditDialog, {
-          project: editData.project,
-          child: editData.child,
-          onClose: function () { setEditSeed(null) },
-          onSaved: function () { setEditSeed(null) }
-        })
       }
-      return null
+      return h(React.Fragment, null, dialog, h(CompletionToasts, { services: props.services }))
+    }
+
+    // 会话完成提示条：右下角堆叠，6 秒自动消失，点击打开对应会话
+    function CompletionToasts(props) {
+      ensureStyle()
+      const pair = useCompletionToasts()
+      const items = pair[0]
+      const setItems = pair[1]
+      if (!items.length) return null
+      return h('div', { className: 'pw-toasts' }, items.map(function (item) {
+        const done = item.kind !== 'warning'
+        return h('div', {
+          key: item.key,
+          className: 'pw-toast',
+          title: done ? '点击打开这个会话' : '点击去处理这个会话',
+          onClick: function () {
+            setItems(function (prev) { return prev.filter(function (next) { return next.key !== item.key }) })
+            try {
+              const ws = props.services && props.services.uiWorkspace
+              if (ws && typeof ws.openSession === 'function') ws.openSession(item.sessionId)
+            } catch (err) { /* 打不开就只当作提示 */ }
+          }
+        },
+        h('span', { className: 'pw-toast-dot' + (done ? ' done' : ' warn') }, glyph(done ? 'IconCheckCircleOutlineRegular' : 'IconWarningOutlineRegular', 16, done ? '\u2713' : '!')),
+        h('span', { className: 'pw-toast-body' },
+          h('span', { className: 'pw-toast-title' }, item.title),
+          h('span', { className: 'pw-toast-sub' }, done ? '已完成' : '等待你处理')
+        )
+        )
+      }))
     }
 
     function Panel(props) {
