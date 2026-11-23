@@ -56,7 +56,8 @@ window.__ModuleLoader__.load({
       '.sbw-title.dim{color:var(--dsw-alias-label-tertiary)}',
       '.sbw-actions{flex:none;display:none;align-items:center;gap:13px}',
       '.sbw-row:hover .sbw-actions,.sbw-row:focus-within .sbw-actions,.sbw-actions.show{display:inline-flex}',
-      '.sbw-mini{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin:-4px;padding:0;border:none;border-radius:var(--dsw-radius-xs,4px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
+      '.sbw-danger:hover{color:var(--dsw-alias-state-error-primary,#d14343)}',
+  '.sbw-mini{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin:-4px;padding:0;border:none;border-radius:var(--dsw-radius-xs,4px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
       '.sbw-mini:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.sbw-input{flex:1;min-width:0;font-family:inherit;font-size:14px;line-height:20px;padding:0 2px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-button-elevated-fill,var(--dsw-alias-bg-layer-1));color:inherit;outline:none}',
       '.sbw-sess{height:32px;gap:0}',
@@ -412,6 +413,34 @@ window.__ModuleLoader__.load({
         try { await postJson(API.open, { path: path }) }
         catch (err) { setError(errorText(err)) }
       }
+      function confirmAction(text) {
+        try {
+          if (typeof window !== 'undefined' && typeof window.confirm === 'function') return window.confirm(text)
+        } catch (err) { void err }
+        return true
+      }
+      async function removeWorkspace(ws, label) {
+        if (!ws || !ws.workspaceId) return
+        const name = label || ws.title || baseName(ws.path)
+        if (!confirmAction('删除工作区「' + name + '」？\n只会从 DSH 移除这个工作区，不会删除磁盘目录；它名下的会话也会一并从侧边栏消失。')) return
+        setError('')
+        try {
+          await postJson(API.remove, { workspaceId: ws.workspaceId, path: ws.path })
+          await loadTree()
+          notifyChanged()
+        } catch (err) { setError(errorText(err)) }
+      }
+      async function removeProjectItem(project) {
+        if (!project || !project.id) return
+        const name = displayName(project.root, project.alias)
+        if (!confirmAction('从侧边栏移除项目「' + name + '」？\n只移除项目分组，子工作区会回到「未归组」列表，不会被删除。')) return
+        setError('')
+        try {
+          await postJson(API.projectRemove, { projectId: project.id })
+          await loadTree()
+          notifyChanged()
+        } catch (err) { setError(errorText(err)) }
+      }
       // 行结构照抄原生 ProjectRow / SessionRow：folder → chevron → title → hover actions
       function rowShell(options) {
         return h('div', {
@@ -503,6 +532,12 @@ window.__ModuleLoader__.load({
           title: '新建会话',
           onClick: function (e) { e.stopPropagation(); newSession(ws) },
         }, glyph('IconNewChatOutlineRegular', 14, '＋')))
+        actions.push(h('button', {
+          key: 'del',
+          className: 'sbw-mini sbw-danger',
+          title: '删除工作区',
+          onClick: function (e) { e.stopPropagation(); removeWorkspace(ws, label || ws.title) },
+        }, glyph('IconTrashOutlineRegular', 14, '删')))
         return h('div', { key: key },
           rowShell({
             className: 'sbw-row sbw-ws',
@@ -609,7 +644,8 @@ window.__ModuleLoader__.load({
               actions: h('span', { className: 'sbw-actions' },
                 h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
                 h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
-                h('button', { className: 'sbw-mini', title: '新建会话', onClick: function (e) { e.stopPropagation(); newSession(ws) } }, glyph('IconNewChatOutlineRegular', 14, '＋'))
+                h('button', { className: 'sbw-mini', title: '新建会话', onClick: function (e) { e.stopPropagation(); newSession(ws) } }, glyph('IconNewChatOutlineRegular', 14, '＋')),
+                h('button', { className: 'sbw-mini sbw-danger', title: '删除工作区', onClick: function (e) { e.stopPropagation(); removeWorkspace(ws, project.root) } }, glyph('IconTrashOutlineRegular', 14, '删'))
               ),
             }),
             open ? sessionRows(ws, project.id, 1) : null
@@ -647,7 +683,8 @@ window.__ModuleLoader__.load({
               : h('span', { className: 'sbw-actions' },
                 h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
                 h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
-                h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path, name: project.root }) } }, glyph('IconPlusOutlineRegular', 14, '＋'))
+                h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path, name: project.root }) } }, glyph('IconPlusOutlineRegular', 14, '＋')),
+                h('button', { className: 'sbw-mini sbw-danger', title: '移除项目（不删除工作区）', onClick: function (e) { e.stopPropagation(); removeProjectItem(project) } }, glyph('IconTrashOutlineRegular', 14, '删'))
               ),
           }),
           open ? (function () {
