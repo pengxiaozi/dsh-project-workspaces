@@ -929,9 +929,15 @@ window.__ModuleLoader__.load({
         if (!child && !String(name).trim()) { setError('项目名称不能为空'); return }
         setBusy(true); setError('')
         try {
-          const payload = { projectId: project.id, alias: alias, tags: parsedTags }
-          if (child) payload.children = [{ path: child.path, alias: alias, tags: parsedTags }]
-          else payload.name = String(name).trim()
+          const payload = { projectId: project.id }
+          if (child) {
+            // 只改这个子目录自己的别名/标签，绝不能带到项目上（否则整个项目所有目录显示同一个别名）
+            payload.children = [{ path: child.path, alias: alias, tags: parsedTags }]
+          } else {
+            payload.name = String(name).trim()
+            payload.alias = alias
+            payload.tags = parsedTags
+          }
           await postJson(API.projectUpdate, payload)
           notifyChanged()
           props.onSaved()
