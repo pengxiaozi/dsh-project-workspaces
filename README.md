@@ -38,7 +38,9 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 
 1. **项目目录**：点「浏览…」调原生目录选择器（`uiWorkspace.pickDirectory()`），也可直接粘贴路径
 2. **项目名称**：默认取目录名，可改
-3. **扫描（可选）** → 勾选要独立成子工作区的直接子目录（已注册的标「已注册·复用」，勾选后复用原 Workspace，不会重复创建）；
+3. **扫描（可选）** → 得到一棵可展开的目录树，勾选要独立成子工作区的目录（已注册的标「已注册·复用」，勾选后复用原 Workspace，不会重复创建）；
+   - 默认只扫 1 层，标题右侧可切 **1 层 / 2 层 / 3 层 / 更深**，逐层往下展开（最多 6 层），勾父节点等于勾整棵子树
+   - 自动忽略 `node_modules`、`.git`、`dist`、`build`、`vendor`、`__pycache__` 等依赖/构建目录，并提示忽略了多少个
    **不扫描也能创建**：不点扫描直接点「创建工作区」，会把项目根目录本身注册成一个 Workspace（叶子项目），适合一个目录就是一个项目的情况
 4. **创建工作区**：为每个勾选的子目录创建（或复用）独立 Workspace，并把层级写入 `project-workspaces.json`
 
@@ -83,6 +85,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **会话导出**：会话行 `⇩` 导出单个会话、子工作区行 `⇩` 导出该工作区的全部会话、项目行 `⇩` 导出整个项目（含所有子工作区）的会话；服务端读 `sessionQuery.readSession` 汇成 Markdown（用户/助手消息、工具调用与结果，跳过 system/developer），文件名 `标签-会话导出-YYYYMMDD.md`，浏览器直接下载
 - **临时会话**：标题栏的 `◷` 按钮直接开一个临时会话——在系统临时目录下建 `dsh-temp-<时间戳>` 并注册成工作区，会话立刻打开；临时工作区单独收在侧边栏的「临时会话」分组里，用完点行尾删除即可（只删工作区，不删项目）
 - **叶子项目**：没有子工作区的项目直接把自己注册成一个 Workspace，侧边栏里点它就能开会话，不需要先扫描
+- **递归扫描**：项目 → 子目录可以多层（`public/web/src`），子工作区按相对路径存进项目，侧边栏会按路径层级自动合并成目录节点
 - **别名可留空**：别名只是侧边栏上的补充说明，留空就显示项目名称本身
 - **当前会话高亮 + 自动滚动**：正在用的会话在侧边栏里始终有品牌色底 + 左侧 2px 竖条 + 品牌色标题；打开/切换会话时侧边栏自动滚到它，被折叠的工作区与目录、以及超过 6 条的会话列表都会为它自动展开
 - **会话完成提示**：侧边栏订阅槽位给的 `useSessionStatus`（它的快照是 `ReadonlyMap<SessionId, { running, pendingInteraction, completionUnread }>`），当某个会话的 `completionUnread` 由 false 变 true（跑完且不在主视图）时右下角浮出提示条（`已完成`，绿色对勾）；`pendingInteraction` 出现时浮出橙色提示（`等待你处理`）。提示条 6 秒自动消失，点击直接打开该会话，同一会话只保留最新一条
@@ -103,6 +106,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 | `/dsh-project-workspaces/health` | GET | `{ok:true, plugin}` 探活 |
 | `/dsh-project-workspaces/state` | GET | `{ok, dshHome, roots, workspaces, projects}`；项目带 `path / alias / tags`，`projects[].children[]` 带 `alias / tags / registered / workspaceId / sessionCount` |
 | `/dsh-project-workspaces/scan` | POST | `{root}` 扫描直接子目录并记住该根目录 |
+| `/dsh-project-workspaces/tree` | POST | `{root, depth}` 递归扫描目录树（1–6 层，跳过依赖/构建目录），返回 `{tree, skipped, name}` |
 | `/dsh-project-workspaces/register` | POST | `{root, subdirs[]}` 仅注册 Workspace（手动注册入口） |
 | `/dsh-project-workspaces/project` | POST | `{root, name, children[]}` 注册子目录 + 写入/更新项目层级（同一根目录覆盖为最新一次勾选） |
 | `/dsh-project-workspaces/project/rename` | POST | `{projectId, name}` 重命名项目（`projectId` 也接受项目根目录路径） |
@@ -137,7 +141,7 @@ DSH 原生 Workspace 不能嵌套：会话 cwd 必须等于 Workspace 路径，�
 
 ```
 client/client.js      客户端半边：侧边栏（替换原生工作区区域）、新增工作区弹窗、编辑弹窗、设置面板
-lib/index.js          宿主半边：project-workspaces.json 持久化 + 15 条 HTTP 路由（含临时会话 / 导出 / 置顶 / 拖拽排序）
+lib/index.js          宿主半边：project-workspaces.json 持久化 + 16 条 HTTP 路由（含临时会话 / 导出 / 置顶 / 拖拽排序 / 递归扫描）
 cordis.patch.yml      Loader patch（insert project-workspaces）
 ```
 

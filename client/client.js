@@ -1219,6 +1219,7 @@ window.__ModuleLoader__.load({
     const API = {
       state: '/dsh-project-workspaces/state',
       scan: '/dsh-project-workspaces/scan',
+      tree: '/dsh-project-workspaces/tree',
       register: '/dsh-project-workspaces/register',
       remove: '/dsh-project-workspaces/remove',
       project: '/dsh-project-workspaces/project',
@@ -1284,6 +1285,19 @@ window.__ModuleLoader__.load({
       '.pw-control{display:flex;align-items:center;gap:8px;min-width:0}' +
       '.pw-field .pw-input{flex:1 1 auto;width:100%;min-width:0}' +
       '.pw-dirs{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md,12px)}' +
+      '.pw-field-head{display:flex;align-items:center;justify-content:space-between;gap:8px}' +
+      '.pw-depth{display:flex;align-items:center;gap:4px}' +
+      '.pw-depth-btn{height:22px;padding:0 8px;border:0.5px solid var(--dsw-alias-border-l4,rgba(127,127,127,.4));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px;cursor:pointer}' +
+      '.pw-depth-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-depth-btn.on{border-color:var(--dsw-alias-brand-primary,#4d6bfe);color:var(--dsw-alias-brand-primary,#4d6bfe)}' +
+      '.pw-tree .pw-tree-row{display:flex;align-items:center;gap:6px;min-height:26px;padding-right:6px;border-radius:var(--dsw-radius-xs,4px)}' +
+      '.pw-tree .pw-tree-row:hover{background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-tree-tri{flex:none;width:14px;height:18px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:18px;padding:0;cursor:pointer}' +
+      '.pw-tree-tri.pw-tree-leaf{cursor:default;opacity:.45}' +
+      '.pw-tree-name{flex:none;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px;cursor:pointer}' +
+      '.pw-tree-rel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
+      '.pw-tree-foot{display:flex;align-items:center;gap:10px;margin-top:4px}' +
+      '.pw-link{border:none;background:transparent;padding:0;color:var(--dsw-alias-brand-primary,#4d6bfe);font-size:12px;line-height:18px;cursor:pointer}' +
       '.pw-footer{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:2px}' +
       '.pw-footer-actions{display:flex;align-items:center;gap:8px}'
     const CSS = SIDEBAR_CSS + DIALOG_CSS
@@ -1313,13 +1327,65 @@ window.__ModuleLoader__.load({
       const ui = services.uiWorkspace
       const [root, setRoot] = useState(props.initialRoot || '')
       const [name, setName] = useState(props.initialName || '')
-      const [dirs, setDirs] = useState(null)
+      const [tree, setTree] = useState(null)
+      const [depth, setDepth] = useState(1)
       const [picked, setPicked] = useState({})
+      const [collapsed, setCollapsed] = useState({})
+      const [skipped, setSkipped] = useState([])
       const [busy, setBusy] = useState(false)
       const [error, setError] = useState('')
       const [message, setMessage] = useState('')
-      function toggle(path) {
-        setPicked(function (prev) { const next = Object.assign({}, prev); next[path] = !next[path]; return next })
+      function resetScan() {
+        setTree(null)
+        setPicked({})
+        setCollapsed({})
+        setSkipped([])
+      }
+      function flatten(nodes, out) {
+        for (const node of nodes || []) {
+          out.push(node)
+          if (node.children && node.children.length) flatten(node.children, out)
+        }
+        return out
+      }
+      function subtreeRels(node) {
+        const out = []
+        const walk = function (item) {
+          out.push(item.rel)
+          if (item.children) item.children.forEach(walk)
+        }
+        walk(node)
+        return out
+      }
+      function toggleNode(node) {
+        const rels = subtreeRels(node)
+        const all = rels.every(function (rel) { return !!picked[rel] })
+        setPicked(function (prev) {
+          const next = Object.assign({}, prev)
+          rels.forEach(function (rel) {
+            if (all) delete next[rel]
+            else next[rel] = true
+          })
+          return next
+        })
+      }
+      function toggleOne(rel) {
+        setPicked(function (prev) {
+          const next = Object.assign({}, prev)
+          if (next[rel]) delete next[rel]
+          else next[rel] = true
+          return next
+        })
+      }
+      function toggleExpand(rel) {
+        setCollapsed(function (prev) {
+          const next = Object.assign({}, prev)
+          next[rel] = !next[rel]
+          return next
+        })
+      }
+      function selectedRels() {
+        return Object.keys(picked).filter(function (rel) { return !!picked[rel] }).sort()
       }
       async function browse() {
         if (!ui || typeof ui.pickDirectory !== 'function') { setError('当前 DSH 没有暴露目录选择器，请直接输入路径'); return }
@@ -1329,51 +1395,86 @@ window.__ModuleLoader__.load({
           if (!dir) return
           setRoot(dir)
           if (!name.trim()) setName(baseName(dir))
-          setDirs(null)
-          setPicked({})
+          resetScan()
         } catch (err) { setError(errorText(err)) }
       }
-      async function scan() {
+      async function scan(nextDepth) {
         const path = String(root || '').trim()
+        const want = Number(nextDepth) >= 1 ? Number(nextDepth) : depth
         if (!path) { setError('先选择或输入项目根目录'); return }
         setBusy(true); setError(''); setMessage('')
         try {
-          const body = await postJson(API.scan, { root: path })
-          const roots = body.roots || []
-          let found = null
-          for (const item of roots) { if (samePath(item.root, path)) { found = item; break } }
-          if (!found) found = roots[roots.length - 1] || null
-          const list = (found && found.dirs) || []
-          setDirs(list)
-          if (found && found.error) setError(found.error)
-          if (!name.trim()) setName(baseName((found && found.root) || path))
+          const body = await postJson(API.tree, { root: path, depth: want })
+          setDepth(want)
+          const nextTree = body.tree || []
+          setTree(nextTree)
+          setSkipped(body.skipped || [])
+          setCollapsed({})
+          // 重新扫描后，把已经不存在的勾选清掉，避免残留旧路径
+          const alive = new Set()
+          flatten(nextTree, []).forEach(function (node) { alive.add(node.rel) })
+          setPicked(function (prev) {
+            const next = {}
+            Object.keys(prev).forEach(function (rel) { if (prev[rel] && alive.has(rel)) next[rel] = true })
+            return next
+          })
+          if (!name.trim()) setName(body.name || baseName(path))
         } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
       }
       async function submit() {
         const path = String(root || '').trim()
         if (!path) { setError('先选择或输入项目根目录'); return }
         // 不扫描也能创建：没有勾选子目录时，只把项目根目录注册成一个工作区
-        const names = (dirs || []).filter(function (dir) { return picked[dir.path] }).map(function (dir) { return dir.name })
+        const rels = selectedRels()
         setBusy(true); setError(''); setMessage('')
         try {
-          const body = await postJson(API.project, { root: path, name: name.trim() || baseName(path), children: names })
+          const body = await postJson(API.project, { root: path, name: name.trim() || baseName(path), children: rels })
           notifyChanged()
           if (props.onCreated) props.onCreated(body.project, body.state)
         } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
       }
-      const selectedCount = (dirs || []).filter(function (dir) { return !!picked[dir.path] }).length
+      const selected = selectedRels()
+      const selectedCount = selected.length
       const canSubmit = !busy && !!String(root || '').trim()
       function onNameKey(event) {
         if (event.key !== 'Enter') return
         event.preventDefault()
         if (canSubmit) submit()
       }
+      function renderNodes(nodes, level) {
+        return (nodes || []).map(function (node) {
+          const rels = subtreeRels(node)
+          const allPicked = rels.every(function (rel) { return !!picked[rel] })
+          const somePicked = !allPicked && rels.some(function (rel) { return !!picked[rel] })
+          const hasKids = node.children && node.children.length > 0
+          const isCollapsed = !!collapsed[node.rel]
+          let rows = [h('div', { className: 'pw-tree-row', key: node.rel, style: { paddingLeft: (6 + level * 14) + 'px' } },
+            hasKids
+              ? h('button', { className: 'pw-tree-tri', title: isCollapsed ? '展开' : '收起', onClick: function () { toggleExpand(node.rel) } }, isCollapsed ? '▸' : '▾')
+              : h('span', { className: 'pw-tree-tri pw-tree-leaf' }, '·'),
+            h('input', {
+              type: 'checkbox',
+              className: somePicked ? 'pw-cb-partial' : '',
+              checked: allPicked,
+              disabled: busy,
+              onChange: function () { toggleNode(node) },
+            }),
+            h('span', { className: 'pw-tree-name', onClick: function () { if (hasKids) toggleExpand(node.rel) } }, node.name),
+            node.registered ? h('span', { className: 'pw-tag' }, '已注册·复用') : null,
+            !hasKids && node.hasChildren ? h('span', { className: 'pw-tag' }, '还有更深层') : null,
+            node.rel !== node.name ? h('span', { className: 'pw-tree-rel' }, node.rel) : null
+          )]
+          if (hasKids && !isCollapsed) rows = rows.concat(renderNodes(node.children, level + 1))
+          return rows
+        })
+      }
+      const allNodes = tree ? flatten(tree, []) : []
       return h('div', { className: 'pw-modal', onClick: props.onClose },
         h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
               h('h3', { className: 'pw-modal-title' }, props.title || '新增工作区'),
-              h('div', { className: 'pw-modal-sub' }, '选项目根目录并命名即可创建；想拆子工作区再点「扫描」勾选')
+              h('div', { className: 'pw-modal-sub' }, '选项目根目录并命名即可创建；想拆子工作区再「扫描」，可以逐层往下展开')
             ),
             h('button', { className: 'pw-close', title: '关闭', onClick: props.onClose }, glyph('IconCloseOutlineRegular', 16, '×'))
           ),
@@ -1386,11 +1487,11 @@ window.__ModuleLoader__.load({
                 className: 'pw-input',
                 placeholder: '例如 D:\\www\\public 或 /home/www/public',
                 value: root,
-                onChange: function (e) { setRoot(e.target.value); setDirs(null); setPicked({}) },
+                onChange: function (e) { setRoot(e.target.value); resetScan() },
                 onKeyDown: function (e) { if (e.key === 'Enter') { e.preventDefault(); scan() } },
               }),
               h('button', { className: 'pw-btn', disabled: busy, onClick: browse }, glyph('IconFolderOpenRegular', 16), '浏览…'),
-              h('button', { className: 'pw-btn', disabled: busy, onClick: scan }, glyph('IconRefreshOutlineRegular', 16), busy ? '扫描中…' : '扫描')
+              h('button', { className: 'pw-btn', disabled: busy, onClick: function () { scan() } }, glyph('IconRefreshOutlineRegular', 16), busy ? '扫描中…' : '扫描')
             )
           ),
           h('div', { className: 'pw-field' },
@@ -1404,19 +1505,32 @@ window.__ModuleLoader__.load({
             })
           ),
           h('div', { className: 'pw-field' },
-            h('label', { className: 'pw-label' }, dirs === null ? '子工作区' : '子工作区（已选 ' + selectedCount + ' / 共 ' + dirs.length + '）'),
-            dirs === null
-              ? h('div', { className: 'pw-msg' }, '可选：点「扫描」列出直接子目录并勾选。不扫描也行，那样只把项目根目录本身注册成一个工作区。')
-              : dirs.length
+            h('div', { className: 'pw-field-head' },
+              h('label', { className: 'pw-label' }, tree === null ? '子工作区' : '子工作区（已选 ' + selectedCount + ' / 共 ' + allNodes.length + '）'),
+              tree !== null && allNodes.length
+                ? h('div', { className: 'pw-depth' },
+                  [1, 2, 3, 6].map(function (value) {
+                    return h('button', {
+                      key: 'd' + value,
+                      className: 'pw-depth-btn' + (depth === value ? ' on' : ''),
+                      disabled: busy,
+                      title: value === 6 ? '一直展开到 6 层（不继续往下）' : '展开到第 ' + value + ' 层',
+                      onClick: function () { scan(value) },
+                    }, value === 6 ? '更深' : value + ' 层')
+                  })
+                )
+                : null
+            ),
+            tree === null
+              ? h('div', { className: 'pw-msg' }, '可选：点「扫描」列出子目录（默认 1 层，可切到 2/3 层或更深）。不扫描也行，那样只把项目根目录本身注册成一个工作区。')
+              : allNodes.length
                 ? h('div', null,
-                  h('div', { className: 'pw-dirs' }, dirs.map(function (dir) {
-                    return h('label', { className: 'pw-dir', key: dir.path },
-                      h('input', { type: 'checkbox', checked: !!picked[dir.path], disabled: busy, onChange: function () { toggle(dir.path) } }),
-                      h('b', null, dir.name),
-                      h('span', { className: 'pw-path' }, dir.path),
-                      dir.registered ? h('span', { className: 'pw-tag' }, '已注册·复用') : null
-                    )
-                  })),
+                  h('div', { className: 'pw-dirs pw-tree' }, renderNodes(tree, 0)),
+                  h('div', { className: 'pw-tree-foot' },
+                    h('button', { className: 'pw-link', disabled: busy, onClick: function () { const next = {}; allNodes.forEach(function (node) { next[node.rel] = true }); setPicked(next) } }, '全选'),
+                    h('button', { className: 'pw-link', disabled: busy, onClick: function () { setPicked({}) } }, '清空'),
+                    skipped.length ? h('span', { className: 'pw-muted' }, '已忽略 ' + skipped.length + ' 个依赖/构建目录') : null
+                  ),
                   h('div', { className: 'pw-muted' }, '同一父目录下的子工作区（如 public/web、public/page）会在侧边栏自动合并到一个目录节点里。')
                 )
                 : h('div', { className: 'pw-msg' }, '该目录下没有子目录')
