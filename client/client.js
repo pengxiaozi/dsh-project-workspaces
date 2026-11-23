@@ -62,7 +62,10 @@ window.__ModuleLoader__.load({
       '.sbw-input{flex:1;min-width:0;font-family:inherit;font-size:14px;line-height:20px;padding:0 2px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-button-elevated-fill,var(--dsw-alias-bg-layer-1));color:inherit;outline:none}',
       '.sbw-sess{height:32px;gap:0}',
       '.sbw-sess .sbw-title{margin:0 6px 0 var(--dsh-sidebar-label-gap,6px)}',
-      '.sbw-sess.selected{background-color:var(--dsw-alias-interactive-bg-hover)}',
+      '.sbw-sess.selected{position:relative;background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 12%, transparent)}',
+      '.sbw-sess.selected::before{content:"";position:absolute;top:7px;bottom:7px;left:6px;width:2px;border-radius:1px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
+      '.sbw-sess.selected .sbw-title{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
+      '.sbw-sess.selected .sbw-time{color:var(--dsw-alias-brand-primary,#4d6bfe);opacity:.8}',
       '.sbw-dot{flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;color:var(--dsw-alias-state-idle-primary,var(--dsw-alias-label-tertiary))}',
       '.sbw-dot.busy{color:var(--dsw-alias-state-warn-primary,var(--dsw-alias-label-tertiary))}',
       '.sbw-time{flex:none;margin-left:auto;font-size:10px;line-height:16px;color:var(--dsw-alias-label-tertiary);margin-inline-end:-1px}',
@@ -282,6 +285,8 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false)
       const [dragId, setDragId] = useState('')
       const [dropHint, setDropHint] = useState(null)
+      const scrollRef = React.useRef(null)
+      const sessionNodes = React.useRef({})
       async function commitRename(project) {
         const name = renameValue.trim()
         if (!project) { setRenaming(''); return }
@@ -476,6 +481,22 @@ window.__ModuleLoader__.load({
       }
       const loose = wsItems.filter(function (ws) { return !covered.has(String(ws.workspaceId)) })
       const needle = query.trim().toLowerCase()
+      React.useEffect(function () {
+        if (!activeSessionId) return
+        const node = sessionNodes.current[activeSessionId]
+        const box = scrollRef.current
+        if (!node || !box) return
+        try {
+          const row = node.getBoundingClientRect()
+          const view = box.getBoundingClientRect()
+          if (!row || !view || !view.height) return
+          if (row.top >= view.top && row.bottom <= view.bottom) return
+          const offset = (row.top - view.top) - Math.max(0, Math.round((view.height - row.height) / 3))
+          box.scrollTop = Math.max(0, box.scrollTop + offset)
+        } catch (err) {
+          if (typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' })
+        }
+      }, [activeSessionId, tree, openRoots, openChildren, moreOpen, needle])
       function matchesSession(id) {
         if (!needle) return false
         const summary = summaries[id]
@@ -511,20 +532,29 @@ window.__ModuleLoader__.load({
       }, [statusMap])
       function sessionIdsOf(ws) {
         const own = (ws && ws.sessionIds) || []
-        if (own.length) return own
         const wsId = String((ws && ws.workspaceId) || '')
         if (!wsId) return own
-        const ids = []
+        // ws.sessionIds 有时不完整（新会话还没回写），和会话快照里的 workspaceId 取并集
+        const seen = new Set(own.map(String))
+        const ids = own.slice()
         for (const id of Object.keys(summaries)) {
           const summary = summaries[id]
           if (!summary) continue
           const owner = String(summary.workspaceId || (summary.workspace && summary.workspace.id) || '')
-          if (owner === wsId) ids.push(id)
+          if (owner === wsId && !seen.has(String(id))) {
+            seen.add(String(id))
+            ids.push(id)
+          }
         }
         return ids
       }
       function isRootOpen(key) { return openRoots[key] !== false }
-      function isChildOpen(key) { return openChildren[key] !== false }
+      function isChildOpen(key, ws) {
+        if (openChildren[key] !== false) return true
+        // 当前打开的会话所在的工作区，即使被折叠也强制展开，保证它在侧边栏里可见
+        if (!ws || !activeSessionId) return false
+        return sessionIdsOf(ws).map(String).indexOf(activeSessionId) >= 0
+      }
       function toggleRoot(key) {
         setOpenRoots(function (prev) {
           const next = Object.assign({}, prev)
@@ -664,7 +694,9 @@ window.__ModuleLoader__.load({
         const indent = { '--sbw-indent': (depth * 12) + 'px' }
         if (!ids.length) return h('div', { className: 'sbw-empty', style: indent }, '暂无会话')
         if (!visible.length) return null
-        const expanded = moreOpen[key] === true
+        // 当前会话就在这个工作区里时，直接铺开全部会话，保证它落在可见范围
+        const activeInside = String(activeSessionId) !== '' && visible.map(String).indexOf(activeSessionId) >= 0
+        const expanded = moreOpen[key] === true || activeInside
         const shown = expanded || needle ? visible : visible.slice(0, SESSION_PREVIEW)
         const rows = shown.map(function (id) {
           const summary = summaries[id]
@@ -677,6 +709,9 @@ window.__ModuleLoader__.load({
             title: sessionLabel(summary),
             style: indent,
             onClick: function () { openSession(id) },
+            ref: function (node) {
+              if (node) sessionNodes.current[String(id)] = node
+            },
           },
             h('span', { className: 'sbw-slot' }, h('span', { className: 'sbw-dot' + (running ? ' busy' : '') })),
             h('span', { className: 'sbw-title' }, sessionLabel(summary)),
@@ -715,7 +750,7 @@ window.__ModuleLoader__.load({
         return rows
       }
       function workspaceNode(ws, label, key, depth, meta) {
-        const open = isChildOpen(key)
+        const open = isChildOpen(key, ws)
         const info = meta || {}
         const child = info.child || null
         const actions = []
@@ -799,6 +834,15 @@ window.__ModuleLoader__.load({
         for (const child of node.children.values()) total += countLeaves(child)
         return total
       }
+      // 目录节点下面是否挂着「当前打开的会话」，是的话该目录也强制展开
+      function dirHasActive(node) {
+        if (!activeSessionId) return false
+        if (node.item && node.item.ws && sessionIdsOf(node.item.ws).map(String).indexOf(activeSessionId) >= 0) return true
+        for (const child of node.children.values()) {
+          if (dirHasActive(child)) return true
+        }
+        return false
+      }
       function dirNode(node, key, depth, project) {
         const indent = { '--sbw-indent': (depth * 12) + 'px' }
         const hasChildren = node.children.size > 0
@@ -813,7 +857,7 @@ window.__ModuleLoader__.load({
           }
           return workspaceNode(item.ws, node.name, key, depth, { projectId: project && project.id, child: item.child })
         }
-        const open = isChildOpen(key)
+        const open = isChildOpen(key) || dirHasActive(node)
         const rows = []
         rows.push(rowShell({
           rowKey: key + ':row',
@@ -842,7 +886,7 @@ window.__ModuleLoader__.load({
           return sessionIdsOf(ws).some(matchesSession)
         })
         if (needle && !children.length && String(project.root + ' ' + project.path).toLowerCase().indexOf(needle) < 0) return null
-        const open = needle ? true : rootOpen
+        const open = needle ? true : (rootOpen || Boolean(project.selfWs && activeSessionId && sessionIdsOf(project.selfWs).map(String).indexOf(activeSessionId) >= 0))
         // 叶子项目：项目根目录自身就是一个 Workspace，没有再细分的子工作区
         if (!project.children.length && project.selfWs) {
           const ws = project.selfWs
@@ -970,7 +1014,7 @@ window.__ModuleLoader__.load({
           )
         ),
         error ? h('div', { className: 'sbw-msg' }, error) : null,
-        h('div', { className: 'sbw-scroll' },
+        h('div', { className: 'sbw-scroll', ref: scrollRef },
           h('div', { className: 'sbw-list' },
             empty ? h('div', { className: 'sbw-empty sbw-empty-page' },
               '还没有工作区。点右上角 ＋ 选择目录、命名项目并勾选子目录，即可把项目拆成多个独立子工作区。') : null,
