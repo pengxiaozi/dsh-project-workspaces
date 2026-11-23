@@ -88,6 +88,11 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **递归扫描**：项目 → 子目录可以多层（`public/web/src`），子工作区按相对路径存进项目，侧边栏会按路径层级自动合并成目录节点
 - **别名可留空**：别名只是侧边栏上的补充说明，留空就显示项目名称本身
 - **当前会话高亮 + 自动滚动**：正在用的会话在侧边栏里始终有品牌色底 + 左侧 2px 竖条 + 品牌色标题；打开/切换会话时侧边栏自动滚到它，被折叠的工作区与目录、以及超过 6 条的会话列表都会为它自动展开
+- **项目状态角标**：项目行右侧用小圆点 + 数字显示该项目下「待处理 / 在跑 / 未读完成」的会话数，不用展开就知道哪个项目还在跑
+- **标题栏总览**：窗口标题「工作区」旁边汇总全局待处理与在跑的数量，侧边栏窄的时候也能一眼看到
+- **标签筛选**：标题栏下方把项目与子目录的标签做成 chip，点一个只看带该标签的项目，再点取消
+- **Ctrl / Cmd + K 快速跳转**：任意位置按下即弹出命令面板，输入几个字筛项目 / 子工作区 / 工作区 / 会话，↑↓ 选择、回车直接打开
+
 - **会话完成提示**：侧边栏订阅槽位给的 `useSessionStatus`（它的快照是 `ReadonlyMap<SessionId, { running, pendingInteraction, completionUnread }>`），当某个会话的 `completionUnread` 由 false 变 true（跑完且不在主视图）时右下角浮出提示条（`已完成`，绿色对勾）；`pendingInteraction` 出现时浮出橙色提示（`等待你处理`）。提示条 6 秒自动消失，点击直接打开该会话，同一会话只保留最新一条
 - **会话重命名**：会话行 hover 出 `✎`，就地变成输入框，回车保存 / Esc 取消；走原生 `SessionFace.rename`（`sessions.using(id, { source: 'workspaceOperation' }, ref => ref.binding.session.rename(title))`），成功后侧边栏与原生列表同步更新
 - **同父目录自动合并**：子工作区按相对项目根的路径分段聚成树，`public/web`、`public/page` 只出现一个 `public` 节点（右侧显示子工作区数量）

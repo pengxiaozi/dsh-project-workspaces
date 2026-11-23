@@ -76,6 +76,13 @@ window.__ModuleLoader__.load({
       '.sbw-time{flex:none;margin-left:auto;font-size:10px;line-height:16px;color:var(--dsw-alias-label-tertiary);margin-inline-end:-1px}',
       '.sbw-empty-page{padding:16px 12px;font-size:13px;line-height:20px}',
       '.sbw-empty{padding:8px 12px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) + var(--sbw-indent,0px));color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
+      '.sbw-roll{margin-left:auto;flex:none;display:flex;align-items:center;gap:6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-roll-item{display:inline-flex;align-items:center;gap:3px}',
+      '.sbw-filters{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px 6px 12px}',
+      '.sbw-filter{height:20px;padding:0 8px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.24));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px;cursor:pointer}',
+      '.sbw-filter:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.sbw-filter.on{border-color:var(--dsw-alias-brand-primary,#4d6bfe);color:var(--dsw-alias-brand-primary,#4d6bfe)}',
+      '.sbw-hd-sum{flex:none;display:inline-flex;align-items:center;gap:4px;margin-right:4px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-sect-head{height:22px;display:flex;align-items:center;padding-left:calc(var(--dsh-sidebar-row-padding,12px) - 3px);font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);letter-spacing:0.02em}',
       '.sbw-pin.pinned{color:var(--dsw-alias-brand-primary,#4d6bfe);opacity:1}',
       '.sbw-dragging{opacity:0.45}',
@@ -269,6 +276,33 @@ window.__ModuleLoader__.load({
       }))
     }
 
+    // 把服务端返回的项目原始数据映射成侧边栏使用的结构（子目录 -> 已注册的 Workspace）
+    function mapProjects(rawProjects, wsItems) {
+      const byPath = new Map()
+      const byId = new Map()
+      for (const ws of wsItems || []) {
+        byPath.set(normalizePath(ws.path), ws)
+        byId.set(String(ws.workspaceId), ws)
+      }
+      return (rawProjects || []).map(function (project) {
+        const children = (project.children || []).map(function (child) {
+          const ws = byPath.get(normalizePath(child.path)) || byId.get(String(child.workspaceId || '')) || null
+          return { child: child, ws: ws || null }
+        })
+        const selfWs = byPath.get(normalizePath(project.path || project.root)) || byId.get(String(project.workspaceId || '')) || null
+        return {
+          id: project.id,
+          root: project.name || baseName(project.root),
+          path: project.path || project.root,
+          alias: project.alias || '',
+          tags: project.tags || [],
+          pinned: project.pinned === true,
+          selfWs: selfWs || null,
+          children: children,
+        }
+      })
+    }
+
     function SidebarBrowser(props) {
       ensureStyle()
       const sessions = props.sessions
@@ -280,6 +314,7 @@ window.__ModuleLoader__.load({
       const sessionSnap = useSnapshot(sessions && sessions.list)
       const [tree, setTree] = useState(null)
       const [query, setQuery] = useState('')
+      const [tagFilter, setTagFilter] = useState('')
       const [searchOpen, setSearchOpen] = useState(false)
       const [openRoots, setOpenRoots] = useState({})
       const [openChildren, setOpenChildren] = useState({})
@@ -463,31 +498,7 @@ window.__ModuleLoader__.load({
       const activeSessionId = String(
         (sessionSnap && (sessionSnap.activeSessionId || sessionSnap.currentSessionId || sessionSnap.selectedSessionId || sessionSnap.activeId || sessionSnap.selectedId || (sessionSnap.active && sessionSnap.active.id) || (sessionSnap.current && sessionSnap.current.id))) || ''
       )
-      const byPath = new Map()
-      const byId = new Map()
-      for (const ws of wsItems) {
-        byPath.set(normalizePath(ws.path), ws)
-        byId.set(String(ws.workspaceId), ws)
-      }
-      const projects = Array.isArray(tree)
-        ? tree.map(function (project) {
-          const children = (project.children || []).map(function (child) {
-            const ws = byPath.get(normalizePath(child.path)) || byId.get(String(child.workspaceId || '')) || null
-            return { child: child, ws: ws || null }
-          })
-          const selfWs = byPath.get(normalizePath(project.path || project.root)) || byId.get(String(project.workspaceId || '')) || null
-          return {
-            id: project.id,
-            root: project.name || baseName(project.root),
-            path: project.path || project.root,
-            alias: project.alias || '',
-            tags: project.tags || [],
-            pinned: project.pinned === true,
-            selfWs: selfWs || null,
-            children: children,
-          }
-        })
-        : null
+      const projects = Array.isArray(tree) ? mapProjects(tree, wsItems) : null
       const legacy = buildGroups(wsItems)
       // 没归入任何项目的 Workspace 平铺在项目后面，直接按工作区行显示（不再有「其他 Workspace」分组标题）
       const covered = new Set()
@@ -1032,6 +1043,35 @@ window.__ModuleLoader__.load({
         if (node.item && node.item.ws) rows.push(workspaceNode(node.item.ws, '本目录', key + '/__self__', depth + 1, { projectId: project && project.id, child: node.item.child }))
         return h('div', { key: key }, rows)
       }
+      // 项目级状态汇总：把项目下所有工作区的会话按 running / 待处理 / 未读 归类
+      function projectRollup(project) {
+        const ids = []
+        const collect = function (ws) {
+          if (!ws) return
+          sessionIdsOf(ws).forEach(function (id) { ids.push(String(id)) })
+        }
+        if (project.children) project.children.forEach(function (item) { if (item && item.ws) collect(item.ws) })
+        collect(project.selfWs)
+        let running = 0
+        let pending = 0
+        let unread = 0
+        ids.forEach(function (id) {
+          const status = statusOf(id)
+          if (!status) return
+          if (status.pendingInteraction) pending += 1
+          else if (status.running) running += 1
+          else if (status.completionUnread) unread += 1
+        })
+        return { running: running, pending: pending, unread: unread, total: ids.length }
+      }
+      function rollupBadge(rollup) {
+        if (!rollup || (!rollup.running && !rollup.pending && !rollup.unread)) return null
+        return h('span', { className: 'sbw-roll', title: rollup.pending ? '有会话等待你处理' : (rollup.running ? '有会话正在回答' : '有会话已完成未查看') },
+          rollup.pending ? h('span', { className: 'sbw-roll-item' }, statusDot('warning'), String(rollup.pending)) : null,
+          rollup.running ? h('span', { className: 'sbw-roll-item' }, statusDot('ongoing'), String(rollup.running)) : null,
+          rollup.unread ? h('span', { className: 'sbw-roll-item' }, statusDot('done'), String(rollup.unread)) : null
+        )
+      }
       function projectNode(project) {
         const rootOpen = isRootOpen(project.id)
         const children = project.children.filter(function (item) {
@@ -1056,7 +1096,8 @@ window.__ModuleLoader__.load({
               onClick: function () { toggleRoot(project.id) },
               text: h('span', { className: 'sbw-text' },
                 h('span', { className: 'sbw-title' }, displayName(project.root, project.alias)),
-                tagChips(project.tags)
+                tagChips(project.tags),
+                rollupBadge(projectRollup(project))
               ),
               actions: h('span', { className: 'sbw-actions' },
                 h('button', { className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''), title: project.pinned ? '取消置顶' : '置顶项目', onClick: function (e) { e.stopPropagation(); togglePin(project) } }, glyph('IconPinOutlineRegular', 14, '📌')),
@@ -1093,7 +1134,8 @@ window.__ModuleLoader__.load({
               })
               : h('span', { className: 'sbw-text' },
                 h('span', { className: 'sbw-title' }, displayName(project.name || project.root, project.alias)),
-                tagChips(project.tags)
+                tagChips(project.tags),
+                rollupBadge(projectRollup(project))
               ),
             actions: isRenaming
               ? h('span', { className: 'sbw-actions show' },
@@ -1126,10 +1168,37 @@ window.__ModuleLoader__.load({
           )
         )
       }
-      const hasProjects = projects && projects.length
-      const pinnedProjects = projects ? projects.filter(function (project) { return project.pinned === true }) : []
-      const normalProjects = projects ? projects.filter(function (project) { return project.pinned !== true }) : []
-      const looseVisible = needle
+      // 标题栏总览：全站在跑 / 待处理的会话数，收起侧边栏前也能一眼看到
+      const headerSum = (function () {
+        if (!statusMap) return null
+        let running = 0
+        let pending = 0
+        const each = function (status) {
+          if (!status) return
+          if (status.pendingInteraction) pending += 1
+          else if (status.running) running += 1
+        }
+        if (typeof statusMap.forEach === 'function') statusMap.forEach(each)
+        else Object.keys(statusMap).forEach(function (key) { each(statusMap[key]) })
+        return (running || pending) ? { running: running, pending: pending } : null
+      })()
+      const allTags = (function () {
+        const set = new Set()
+        ;(projects || []).forEach(function (project) {
+          (project.tags || []).forEach(function (tag) { set.add(tag) })
+          ;(project.children || []).forEach(function (item) { ((item.child && item.child.tags) || []).forEach(function (tag) { set.add(tag) }) })
+        })
+        return Array.from(set).sort(function (a, b) { return a.localeCompare(b, 'zh-CN') })
+      })()
+      const projectHasTag = function (project, tag) {
+        if ((project.tags || []).indexOf(tag) >= 0) return true
+        return (project.children || []).some(function (item) { return ((item.child && item.child.tags) || []).indexOf(tag) >= 0 })
+      }
+      const taggedProjects = tagFilter ? (projects || []).filter(function (project) { return projectHasTag(project, tagFilter) }) : (projects || [])
+      const hasProjects = taggedProjects.length
+      const pinnedProjects = taggedProjects.filter(function (project) { return project.pinned === true })
+      const normalProjects = taggedProjects.filter(function (project) { return project.pinned !== true })
+      const looseVisible = tagFilter ? [] : needle
         ? loose.filter(function (ws) {
           if (String(ws.title || baseName(ws.path) || '').toLowerCase().indexOf(needle) >= 0) return true
           return sessionIdsOf(ws).some(matchesSession)
@@ -1142,6 +1211,10 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'sbw sbw-wide' },
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
           searchOpen ? null : h('span', { className: 'sbw-hd-label' }, '工作区'),
+          searchOpen || !headerSum ? null : h('span', { className: 'sbw-hd-sum', title: (headerSum.running ? headerSum.running + ' 个会话正在回答' : '') + (headerSum.pending ? (headerSum.running ? '，' : '') + headerSum.pending + ' 个等待你处理' : '') },
+            headerSum.pending ? h('span', { className: 'sbw-roll-item' }, statusDot('warning'), String(headerSum.pending)) : null,
+            headerSum.running ? h('span', { className: 'sbw-roll-item' }, statusDot('ongoing'), String(headerSum.running)) : null
+          ),
           searchOpen
             ? h('div', { className: 'sbw-hd-search open' },
               h('label', { className: 'sbw-search open' },
@@ -1177,11 +1250,23 @@ window.__ModuleLoader__.load({
           )
         ),
         error ? h('div', { className: 'sbw-msg' }, error) : null,
+        allTags.length
+          ? h('div', { className: 'sbw-filters' }, allTags.map(function (tag) {
+            return h('button', {
+              key: 'tag:' + tag,
+              className: 'sbw-filter' + (tagFilter === tag ? ' on' : ''),
+              title: tagFilter === tag ? '取消筛选' : '只看带「' + tag + '」标签的项目',
+              onClick: function () { setTagFilter(tagFilter === tag ? '' : tag) },
+            }, tag)
+          }))
+          : null,
         h('div', { className: 'sbw-scroll', ref: scrollRef },
           h('div', { className: 'sbw-list' },
             empty ? h('div', { className: 'sbw-empty sbw-empty-page' },
-              '还没有工作区。点右上角 ＋ 选择目录、命名项目并勾选子目录，即可把项目拆成多个独立子工作区。') : null,
-            !empty && !hasProjects ? h('div', { className: 'sbw-hint' }, '提示：点 ＋ 新建项目，或到「设置 → 项目工作区」点「按父目录自动归组」。') : null,
+              tagFilter
+                ? '没有带「' + tagFilter + '」标签的项目。再点一次上方的标签可以取消筛选。'
+                : '还没有工作区。点右上角 ＋ 选择目录、命名项目并勾选子目录，即可把项目拆成多个独立子工作区。') : null,
+            !empty && !hasProjects && !tagFilter ? h('div', { className: 'sbw-hint' }, '提示：点 ＋ 新建项目，或到「设置 → 项目工作区」点「按父目录自动归组」。') : null,
             pinnedProjects.length ? h('div', { className: 'sbw-group sbw-sect' },
               h('div', { className: 'sbw-sect-head' }, '置顶'),
               pinnedProjects.map(projectNode)
@@ -1263,6 +1348,16 @@ window.__ModuleLoader__.load({
       '.pw-project{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:var(--dsw-radius-md,12px);border:0.5px solid var(--dsw-alias-border-l2)}' +
       '.pw-project-head{display:flex;align-items:center;justify-content:space-between;gap:10px}' +
       '.pw-child{display:flex;align-items:center;gap:8px;margin-left:12px;padding:4px 8px;border-radius:var(--dsw-radius-sm,8px);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}' +
+    '.pw-cmd-mask{align-items:flex-start;padding-top:12vh}' +
+    '.pw-cmd-card{width:min(560px,calc(100vw - 48px));background:var(--dsw-alias-bg-layer-1,#fff);border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.24));border-radius:var(--dsw-radius-lg,16px);box-shadow:0 16px 48px rgba(0,0,0,.24);padding:8px}' +
+    '.pw-cmd-input{width:100%;height:36px;border:none;outline:none;background:transparent;font-size:14px;line-height:20px;color:var(--dsw-alias-label-primary)}' +
+    '.pw-cmd-list{max-height:320px;overflow-y:auto;margin-top:4px}' +
+    '.pw-cmd-row{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:var(--dsw-radius-sm,8px);cursor:pointer}' +
+    '.pw-cmd-row.on{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12))}' +
+    '.pw-cmd-kind{flex:none;padding:0 4px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.24));border-radius:var(--dsw-radius-xs,4px);font-size:10px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
+    '.pw-cmd-label{flex:none;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}' +
+    '.pw-cmd-hint{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
+    '.pw-cmd-empty{padding:14px 10px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
     '.pw-toasts{position:fixed;top:16px;right:16px;display:flex;flex-direction:column;gap:8px;z-index:2147483000;pointer-events:none}' +
     '.pw-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:8px;min-width:220px;max-width:320px;padding:10px 12px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,12px);background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 8px 24px rgba(0,0,0,.16);cursor:pointer}' +
     '.pw-toast{animation:pw-toast-in .16s ease-out}' +
@@ -1635,6 +1730,109 @@ window.__ModuleLoader__.load({
         )
       )
     }
+    // Ctrl/Cmd+K 快速跳转：一次列出项目、子工作区、会话，回车直达
+    function CommandPalette(props) {
+      ensureStyle()
+      const services = props.services || {}
+      const ui = services.uiWorkspace
+      const [open, setOpen] = useState(false)
+      const [query, setQuery] = useState('')
+      const [cursor, setCursor] = useState(0)
+      const [data, setData] = useState(null)
+      const sessionSnap = useSnapshot(services.sessions && services.sessions.list)
+      const wsSnapForPalette = useSnapshot(services.workspaces && services.workspaces.list)
+      useEffect(function () {
+        function onKey(event) {
+          const mod = event.ctrlKey || event.metaKey
+          if (mod && String(event.key || '').toLowerCase() === 'k') {
+            event.preventDefault()
+            setOpen(true)
+            setQuery('')
+            setCursor(0)
+            return
+          }
+          if (event.key === 'Escape') setOpen(false)
+        }
+        window.addEventListener('keydown', onKey)
+        return function () { window.removeEventListener('keydown', onKey) }
+      }, [])
+      useEffect(function () {
+        if (!open) return undefined
+        let alive = true
+        request(API.state).then(function (body) { if (alive) setData(body) }).catch(function () { if (alive) setData({ projects: [], workspaces: [] }) })
+        return function () { alive = false }
+      }, [open])
+      if (!open) return null
+      const rows = []
+      const push = function (row) { rows.push(row) }
+      const paletteProjects = mapProjects((data && data.projects) || [], (wsSnapForPalette && wsSnapForPalette.items) || [])
+      ;paletteProjects.forEach(function (project) {
+        push({ key: 'p:' + project.id, kind: '项目', label: displayName(project.name || project.root, project.alias), hint: project.path, run: function () {
+          const target = project.selfWs || (project.children.find(function (item) { return !!item.ws }) || {}).ws
+          if (target && ui && typeof ui.startSession === 'function') ui.startSession(target.workspaceId)
+        } })
+        ;(project.children || []).forEach(function (item) {
+          if (!item.ws) return
+          push({ key: 'w:' + item.ws.workspaceId, kind: '子工作区', label: displayName(item.child.name, item.child.alias), hint: item.child.path, run: function () {
+            if (ui && typeof ui.startSession === 'function') ui.startSession(item.ws.workspaceId)
+          } })
+        })
+      })
+      ;((data && data.workspaces) || []).forEach(function (workspace) {
+        push({ key: 'ws:' + workspace.workspaceId, kind: '工作区', label: workspace.title || baseName(workspace.path), hint: workspace.path, run: function () {
+          if (ui && typeof ui.startSession === 'function') ui.startSession(workspace.workspaceId)
+        } })
+      })
+      ;(((sessionSnap && sessionSnap.byId) ? Object.keys(sessionSnap.byId).map(function (id) { return sessionSnap.byId[id] }) : ((sessionSnap && sessionSnap.items) || []))).forEach(function (summary) {
+        if (!summary || !summary.id) return
+        push({ key: 's:' + summary.id, kind: '会话', label: sessionLabel(summary), hint: summary.workspaceId || '', run: function () {
+          if (ui && typeof ui.openSession === 'function') ui.openSession(summary.id)
+        } })
+      })
+      const lowered = query.trim().toLowerCase()
+      const filtered = lowered
+        ? rows.filter(function (row) { return (row.label + ' ' + row.hint + ' ' + row.kind).toLowerCase().indexOf(lowered) >= 0 })
+        : rows
+      const visible = filtered.slice(0, 40)
+      const active = Math.min(Math.max(cursor, 0), Math.max(visible.length - 1, 0))
+      const close = function () { setOpen(false) }
+      const run = function (row) {
+        if (!row) return
+        close()
+        try { row.run() } catch (err) { void err }
+      }
+      return h('div', { className: 'pw-modal pw-cmd-mask', onClick: close },
+        h('div', { className: 'pw-cmd-card', onClick: function (e) { e.stopPropagation() } },
+          h('input', {
+            className: 'pw-cmd-input',
+            autoFocus: true,
+            placeholder: '搜索项目 / 子工作区 / 会话，回车打开',
+            value: query,
+            onChange: function (e) { setQuery(e.target.value); setCursor(0) },
+            onKeyDown: function (e) {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(active + 1) }
+              else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(Math.max(active - 1, 0)) }
+              else if (e.key === 'Enter') { e.preventDefault(); run(visible[active]) }
+              else if (e.key === 'Escape') { e.preventDefault(); close() }
+            },
+          }),
+          visible.length
+            ? h('div', { className: 'pw-cmd-list' }, visible.map(function (row, index) {
+              return h('div', {
+                key: row.key,
+                className: 'pw-cmd-row' + (index === active ? ' on' : ''),
+                onMouseEnter: function () { setCursor(index) },
+                onClick: function () { run(row) },
+              },
+              h('span', { className: 'pw-cmd-kind' }, row.kind),
+              h('span', { className: 'pw-cmd-label' }, row.label),
+              h('span', { className: 'pw-cmd-hint' }, row.hint))
+            }))
+            : h('div', { className: 'pw-cmd-empty' }, query ? '没有匹配的项目或会话' : '还没有项目，先按 Esc 关闭再点「＋ 新增工作区」')
+        )
+      )
+    }
+
     function OverlayHost(props) {
       const createPair = useCreateDialogSeed()
       const editPair = useEditDialogSeed()
@@ -1689,7 +1887,7 @@ window.__ModuleLoader__.load({
           })
         }
       }
-      return h(React.Fragment, null, dialog, h(CompletionToasts, { services: props.services }))
+      return h(React.Fragment, null, dialog, h(CommandPalette, { services: props.services }), h(CompletionToasts, { services: props.services }))
     }
 
     // 会话完成提示条：右下角堆叠，6 秒自动消失，点击打开对应会话
@@ -1872,7 +2070,7 @@ window.__ModuleLoader__.load({
       const sessions = ctx.get('sessions')
       const workspaces = ctx.get('workspaces')
       const uiWorkspace = ctx.get('uiWorkspace')
-      const services = { uiWorkspace: uiWorkspace, workspaces: workspaces }
+      const services = { uiWorkspace: uiWorkspace, workspaces: workspaces, sessions: sessions }
       if (sessions && workspaces) {
         ctx.slots.inject('sidebar.workspaces', function () {
           return ctx.slots.register({
