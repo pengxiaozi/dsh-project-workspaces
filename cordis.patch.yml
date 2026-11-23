@@ -1,0 +1,4 @@
+# dsh-project-workspaces：项目根 + 子目录 Workspace
+- insert:
+    - id: project-workspaces
+      name: 'dsh-project-workspaces'

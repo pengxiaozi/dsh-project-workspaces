@@ -1,0 +1,1234 @@
+window.__ModuleLoader__.load({
+  id: 'dsh-project-workspaces',
+  factory: (require) => {
+    var module = { exports: {} }
+    var exports = module.exports
+    Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
+    const React = require('react')
+    const h = React.createElement
+    const { useEffect, useState } = React
+    const NS = 'dsh-project-workspaces'
+    const STATE_URL = '/dsh-project-workspaces/state'
+    const OPEN_CREATE_EVENT = 'dsh-project-workspaces:open-create'
+    const CHANGED_EVENT = 'dsh-project-workspaces:changed'
+    // 一个工作区下默认最多铺 6 行会话，多出来的折成「还有 N 个会话」
+    const SESSION_PREVIEW = 6
+    // Fluent 图标来自原生 primitives；动态插件加载时机不确定，失败时回退内联 SVG。
+    let primitives = null
+    try { primitives = require('@deepseek-ai/dsh-client-ui-primitives') || null } catch (err) { primitives = null }
+    const PI = primitives || {}
+    function fluent(name, size, extra) {
+      const Cmp = PI[name]
+      if (!Cmp || (typeof Cmp !== 'function' && typeof Cmp !== 'object')) return null
+      return h(Cmp, Object.assign({ size: size || 16 }, extra || {}))
+    }
+    // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
+    const SIDEBAR_CSS = [
+      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
+      '.sbw-wide{flex:none;max-height:100cqh}',
+      '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);overflow:hidden;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
+      '.sbw-hd-label{position:relative;left:-1px;flex:none;max-width:45%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:20px;font-size:12px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-hd-search{flex:1;max-width:28px;min-width:0;display:flex;align-items:center;margin-left:auto}',
+      '.sbw-hd-search.open{max-width:none}',
+      '.sbw-hd-actions{flex:none;display:flex;align-items:center;gap:4px;max-width:60px}',
+      '.sbw-ibtn{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;border-radius:var(--dsw-radius-sm,8px);padding:0;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary)}',
+      '.sbw-ibtn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.sbw-ibtn:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:-2px}',
+      '.sbw-search{flex:none;display:flex;align-items:center;width:100%;height:28px;border-radius:var(--dsw-radius-sm,8px);background:transparent;cursor:text;color:var(--dsw-alias-label-secondary);overflow:hidden;box-sizing:border-box}',
+      '.sbw-search.open{height:32px;padding:0 4px 0 0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}',
+      '.sbw-search input{flex:1;width:0;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}',
+      '.sbw-search input::placeholder{color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-scroll{flex:1;min-height:0;display:flex;flex-direction:column}',
+      '.sbw-wide .sbw-scroll{display:block;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;scrollbar-gutter:stable}',
+      '.sbw-list{flex:1;min-height:0;padding-bottom:16px}',
+      '.sbw-list > * + *{margin-top:2px}',
+      '.sbw-row{display:flex;align-items:center;gap:var(--dsh-sidebar-label-gap,6px);height:32px;border-radius:var(--dsw-radius-md,12px);border-inline:var(--dsh-sidebar-paint-inset,3px) solid transparent;background-clip:padding-box;box-sizing:border-box;padding:0 8px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) - var(--dsh-sidebar-paint-inset,3px) + var(--sbw-indent,0px));cursor:pointer;color:var(--dsw-alias-label-primary);-webkit-user-select:none;user-select:none}',
+      '.sbw-row:hover{background-color:var(--dsw-alias-interactive-bg-hover)}',
+      '.sbw-slot{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-folder-active{color:var(--dsw-alias-state-business-primary)}',
+      '.sbw-chev{display:none;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}',
+      '@media (hover:hover){.sbw-proj:hover .sbw-chev{display:inline-flex}.sbw-proj:hover .sbw-folder{display:none}}',
+      '.sbw-arrow{transition:transform 150ms ease}',
+      '.sbw-arrow-open{transform:rotate(90deg)}',
+      '.sbw-text{flex:1;min-width:0;display:flex;flex-direction:row;align-items:center;gap:4px;overflow:hidden}',
+      '.sbw-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px}',
+      '.sbw-title.dim{color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-actions{flex:none;display:none;align-items:center;gap:13px}',
+      '.sbw-row:hover .sbw-actions,.sbw-row:focus-within .sbw-actions,.sbw-actions.show{display:inline-flex}',
+      '.sbw-mini{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;margin:-4px;padding:0;border:none;border-radius:var(--dsw-radius-xs,4px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
+      '.sbw-mini:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.sbw-input{flex:1;min-width:0;font-family:inherit;font-size:14px;line-height:20px;padding:0 2px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-button-elevated-fill,var(--dsw-alias-bg-layer-1));color:inherit;outline:none}',
+      '.sbw-sess{height:32px;gap:0}',
+      '.sbw-sess .sbw-title{margin:0 6px 0 var(--dsh-sidebar-label-gap,6px)}',
+      '.sbw-sess.selected{background-color:var(--dsw-alias-interactive-bg-hover)}',
+      '.sbw-dot{flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;color:var(--dsw-alias-state-idle-primary,var(--dsw-alias-label-tertiary))}',
+      '.sbw-dot.busy{color:var(--dsw-alias-state-warn-primary,var(--dsw-alias-label-tertiary))}',
+      '.sbw-time{flex:none;margin-left:auto;font-size:10px;line-height:16px;color:var(--dsw-alias-label-tertiary);margin-inline-end:-1px}',
+      '.sbw-empty-page{padding:16px 12px;font-size:13px;line-height:20px}',
+      '.sbw-empty{padding:8px 12px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) + var(--sbw-indent,0px));color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
+      '.sbw-more .sbw-title{font-size:12px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-more:hover .sbw-title{color:var(--dsw-alias-label-primary)}',
+      '.sbw-more .sbw-chev-inline{display:inline-flex;margin-left:auto;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-count{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-tags{flex:none;display:inline-flex;align-items:center;gap:4px;margin-left:4px;overflow:hidden;max-width:120px}',
+      '.sbw-tag{flex:none;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:16px;padding:0 5px;border-radius:var(--dsw-radius-xs,4px);background:var(--dsw-alias-interactive-bg-hover,color-mix(in srgb,currentColor 12%,transparent));color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-alias{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-loose{margin-top:6px;padding-top:6px;border-top:1px solid var(--dsw-alias-border-l1)}',
+      '.sbw-dir .sbw-folder{color:var(--dsw-alias-label-secondary)}',
+      '.sbw-msg{margin:4px 4px 8px;padding:8px 10px;border-radius:var(--dsw-radius-md,12px);font-size:12px;line-height:18px;color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 10%,transparent)}',
+      '.sbw-hint{padding:4px 12px 8px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-rail{flex:none;display:flex;flex-direction:column;align-items:flex-start}',
+      '.sbw-rail .sbw-hd{gap:0;padding-left:0;margin-bottom:12px;justify-content:flex-start}',
+      '.sbw-rail .sbw-ibtn{width:36px;height:36px;border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-primary)}',
+    ].join('')
+    let styleEl = null
+    function ensureStyle() {
+      if (styleEl || typeof document === 'undefined') return
+      styleEl = document.createElement('style')
+      styleEl.setAttribute('data-dsh-project-workspaces', '')
+      styleEl.textContent = CSS
+      document.head.appendChild(styleEl)
+    }
+
+    function FolderIcon(props) {
+      const fluentIcon = fluent(props.open ? 'IconFolderOpenRegular' : 'IconFolderCloseRegular', 16)
+      if (fluentIcon) return fluentIcon
+      return h('svg', { width: 16, height: 16, viewBox: '0 0 16 16', 'aria-hidden': 'true' },
+        h('path', { d: 'M1.5 3.25h3.94c.3 0 .59.14.78.38l.75.95h7.53c.55 0 1 .45 1 1v7.42c0 .55-.45 1-1 1H1.5c-.55 0-1-.45-1-1V4.25c0-.55.45-1 1-1Z', fill: 'currentColor' })
+      )
+    }
+    function ChevronIcon(props) {
+      const className = 'sbw-arrow' + (props.open ? ' sbw-arrow-open' : '')
+      const fluentIcon = fluent('IconTriangleRightFillRegular', 12, { className: className })
+      if (fluentIcon) return fluentIcon
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 12 12', 'aria-hidden': 'true', className: className },
+        h('path', { d: 'M4 2.25 8.75 6 4 9.75Z', fill: 'currentColor' })
+      )
+    }
+    function glyph(name, size, text) {
+      const fluentIcon = fluent(name, size)
+      return fluentIcon || text
+    }
+    function useSnapshot(source) {
+      const [snap, setSnap] = useState(function () { return source && source.getSnapshot ? source.getSnapshot() : {} })
+      useEffect(function () {
+        if (!source || typeof source.subscribe !== 'function') return undefined
+        setSnap(source.getSnapshot())
+        return source.subscribe(function () { setSnap(source.getSnapshot()) })
+      }, [source])
+      return snap || {}
+    }
+    function sessionLabel(summary) {
+      if (!summary) return '未命名会话'
+      const label = summary.displayTitle || summary.title || summary.name || summary.label || summary.summary
+      if (label) return String(label)
+      const id = String(summary.id || summary.sessionId || '')
+      return id ? '会话 ' + id.slice(0, 8) : '未命名会话'
+    }
+    function sessionStamp(summary) {
+      if (!summary) return 0
+      const keys = ['updatedAt', 'updated_at', 'lastActiveAt', 'lastMessageAt', 'createdAt', 'created_at', 'timestamp']
+      for (const key of keys) {
+        const raw = summary[key]
+        if (raw === undefined || raw === null || raw === '') continue
+        const num = typeof raw === 'number' ? raw : Date.parse(String(raw))
+        if (Number.isFinite(num) && num > 0) return num
+      }
+      return 0
+    }
+    function formatRelative(stamp) {
+      const diff = Date.now() - stamp
+      if (!Number.isFinite(diff) || diff < 0) return ''
+      const minute = 60000
+      const hour = minute * 60
+      const day = hour * 24
+      if (diff < minute) return '刚刚'
+      if (diff < hour) return Math.floor(diff / minute) + ' 分钟'
+      if (diff < day) return Math.floor(diff / hour) + ' 小时'
+      if (diff < day * 7) return Math.floor(diff / day) + ' 天'
+      return Math.floor(diff / day) + ' 天'
+    }
+    function normalizePath(value) {
+      return String(value || '').replace(/[\\\\/]+$/, '').toLowerCase()
+    }
+    function baseName(target) {
+      const parts = String(target || '').split(/[\\\\/]/).filter(Boolean)
+      return parts.length ? parts[parts.length - 1] : '项目'
+    }
+    function buildGroups(items) {
+      const groups = new Map()
+      for (const ws of items || []) {
+        const title = String(ws.title || '')
+        let root = ''
+        let child = title
+        const slash = title.indexOf(' / ')
+        if (slash > 0) { root = title.slice(0, slash); child = title.slice(slash + 3) }
+        if (!root) {
+          const parts = String(ws.path || '').split(/[\\\\/]+/).filter(Boolean)
+          root = parts.length > 1 ? parts[parts.length - 2] : (parts[0] || '项目')
+          child = title || parts[parts.length - 1] || '项目'
+        }
+        if (!groups.has(root)) groups.set(root, [])
+        groups.get(root).push({ ws: ws, child: child })
+      }
+      return Array.from(groups.entries()).map(function (entry) { return { root: entry[0], children: entry[1] } })
+    }
+    // 「新增工作区」弹窗的进程内总线：侧边栏 + 设置面板都能直接拉起弹窗，
+    // 同时保留 window 事件，方便脚本或其他插件触发。
+    const dialogListeners = new Set()
+    function openCreateDialog(detail) {
+      const payload = detail || {}
+      for (const listener of Array.from(dialogListeners)) {
+        try { listener(payload) } catch (err) { void err }
+      }
+      try { window.dispatchEvent(new CustomEvent(OPEN_CREATE_EVENT, { detail: payload })) } catch (err) { void err }
+    }
+    function useCreateDialogSeed() {
+      const [seed, setSeed] = useState(null)
+      useEffect(function () {
+        dialogListeners.add(setSeed)
+        function onOpen(event) { setSeed(event && event.detail ? event.detail : {}) }
+        window.addEventListener(OPEN_CREATE_EVENT, onOpen)
+        return function () {
+          dialogListeners.delete(setSeed)
+          window.removeEventListener(OPEN_CREATE_EVENT, onOpen)
+        }
+      }, [])
+      return [seed, setSeed]
+    }
+    // 「编辑目录」弹窗的进程内总线：projectId + 目标路径（项目根或子目录）。
+    const editListeners = new Set()
+    function openEditDialog(target) {
+      const payload = target || {}
+      for (const listener of Array.from(editListeners)) {
+        try { listener(payload) } catch (err) { void err }
+      }
+    }
+    function useEditDialogSeed() {
+      const [seed, setSeed] = useState(null)
+      useEffect(function () {
+        editListeners.add(setSeed)
+        return function () { editListeners.delete(setSeed) }
+      }, [])
+      return [seed, setSeed]
+    }
+    function displayName(name, alias) {
+      const base = String(name || '')
+      const extra = String(alias || '').trim()
+      return extra ? base + '(' + extra + ')' : base
+    }
+    function tagChips(tags) {
+      if (!tags || !tags.length) return null
+      return h('span', { className: 'sbw-tags' }, tags.map(function (tag, index) {
+        return h('span', { key: index, className: 'sbw-tag' }, tag)
+      }))
+    }
+
+    function SidebarBrowser(props) {
+      ensureStyle()
+      const sessions = props.sessions
+      const workspaces = props.workspaces
+      const uiWorkspace = props.uiWorkspace
+      const wide = props.wide !== false
+      const expandSidebar = typeof props.expandSidebar === 'function' ? props.expandSidebar : function () {}
+      const wsSnap = useSnapshot(workspaces && workspaces.list)
+      const sessionSnap = useSnapshot(sessions && sessions.list)
+      const [tree, setTree] = useState(null)
+      const [query, setQuery] = useState('')
+      const [searchOpen, setSearchOpen] = useState(false)
+      const [openRoots, setOpenRoots] = useState({})
+      const [openChildren, setOpenChildren] = useState({})
+      const [moreOpen, setMoreOpen] = useState({})
+      const [error, setError] = useState('')
+      const [renaming, setRenaming] = useState('')
+      const [renameValue, setRenameValue] = useState('')
+      const [busy, setBusy] = useState(false)
+      async function commitRename(project) {
+        const name = renameValue.trim()
+        if (!project) { setRenaming(''); return }
+        if (!name) { setError('项目名称不能为空'); return }
+        if (name === project.root) { setRenaming(''); return }
+        setBusy(true)
+        setError('')
+        try {
+          const response = await fetch('/dsh-project-workspaces/project/rename', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ projectId: project.id, name: name }),
+          })
+          const body = await response.json().catch(function () { return {} })
+          if (!response.ok || body.ok === false) throw new Error(body.error || ('重命名失败：' + response.status))
+          try {
+            if (workspaces && typeof workspaces.rename === 'function') {
+              for (const item of project.children || []) {
+                const ws = item.ws
+                if (!ws || !ws.workspaceId) continue
+                await workspaces.rename(ws.workspaceId, name + ' / ' + item.child.name)
+              }
+            }
+          } catch (err) { void err }
+          setRenaming('')
+          await loadTree()
+          try { window.dispatchEvent(new CustomEvent(CHANGED_EVENT)) } catch (err) { void err }
+        } catch (err) {
+          setError(String(err && err.message ? err.message : err))
+        } finally {
+          setBusy(false)
+        }
+      }
+      async function loadTree() {
+        try {
+          const response = await fetch(STATE_URL, { credentials: 'same-origin' })
+          const body = await response.json().catch(function () { return {} })
+          if (!response.ok || body.ok === false) throw new Error(body.error || ('读取项目失败：' + response.status))
+          setTree(body.projects || [])
+          setError('')
+        } catch (err) {
+          setTree(null)
+          setError(String(err && err.message ? err.message : err))
+        }
+      }
+      useEffect(function () { loadTree() }, [])
+      useEffect(function () {
+        function onChange() { loadTree() }
+        window.addEventListener(CHANGED_EVENT, onChange)
+        return function () { window.removeEventListener(CHANGED_EVENT, onChange) }
+      }, [])
+      const wsItems = (wsSnap && wsSnap.items) || []
+      const summaries = (function () {
+        const map = Object.assign({}, (sessionSnap && sessionSnap.byId) || {})
+        const list = (sessionSnap && sessionSnap.items) || []
+        for (const item of list) {
+          if (!item) continue
+          const id = String(item.id || item.sessionId || '')
+          if (id && !map[id]) map[id] = item
+        }
+        return map
+      })()
+      const activeSessionId = String(
+        (sessionSnap && (sessionSnap.activeSessionId || sessionSnap.currentSessionId || sessionSnap.selectedSessionId || sessionSnap.activeId || sessionSnap.selectedId || (sessionSnap.active && sessionSnap.active.id) || (sessionSnap.current && sessionSnap.current.id))) || ''
+      )
+      const byPath = new Map()
+      const byId = new Map()
+      for (const ws of wsItems) {
+        byPath.set(normalizePath(ws.path), ws)
+        byId.set(String(ws.workspaceId), ws)
+      }
+      const projects = Array.isArray(tree)
+        ? tree.map(function (project) {
+          const children = (project.children || []).map(function (child) {
+            const ws = byPath.get(normalizePath(child.path)) || byId.get(String(child.workspaceId || '')) || null
+            return { child: child, ws: ws || null }
+          })
+          return { id: project.id, root: project.name || baseName(project.root), path: project.path || project.root, alias: project.alias || '', tags: project.tags || [], children: children }
+        })
+        : null
+      const legacy = buildGroups(wsItems)
+      // 没归入任何项目的 Workspace 平铺在项目后面，直接按工作区行显示（不再有「其他 Workspace」分组标题）
+      const covered = new Set()
+      if (projects) {
+        for (const project of projects) {
+          for (const item of project.children) {
+            if (item.ws) covered.add(String(item.ws.workspaceId))
+          }
+        }
+      }
+      const loose = wsItems.filter(function (ws) { return !covered.has(String(ws.workspaceId)) })
+      const needle = query.trim().toLowerCase()
+      function matchesSession(id) {
+        if (!needle) return false
+        const summary = summaries[id]
+        return sessionLabel(summary).toLowerCase().indexOf(needle) >= 0
+      }
+      function sessionIdsOf(ws) {
+        const own = (ws && ws.sessionIds) || []
+        if (own.length) return own
+        const wsId = String((ws && ws.workspaceId) || '')
+        if (!wsId) return own
+        const ids = []
+        for (const id of Object.keys(summaries)) {
+          const summary = summaries[id]
+          if (!summary) continue
+          const owner = String(summary.workspaceId || (summary.workspace && summary.workspace.id) || '')
+          if (owner === wsId) ids.push(id)
+        }
+        return ids
+      }
+      function isRootOpen(key) { return openRoots[key] !== false }
+      function isChildOpen(key) { return openChildren[key] !== false }
+      function toggleRoot(key) {
+        setOpenRoots(function (prev) {
+          const next = Object.assign({}, prev)
+          next[key] = !isRootOpen(key)
+          return next
+        })
+      }
+      function toggleChild(key) {
+        setOpenChildren(function (prev) {
+          const next = Object.assign({}, prev)
+          next[key] = !isChildOpen(key)
+          return next
+        })
+      }
+      function toggleMore(key) {
+        setMoreOpen(function (prev) {
+          const next = Object.assign({}, prev)
+          next[key] = prev[key] !== true
+          return next
+        })
+      }
+      async function newSession(ws) {
+        setError('')
+        try {
+          if (uiWorkspace && typeof uiWorkspace.startSession === 'function') uiWorkspace.startSession(ws.workspaceId)
+          else {
+            const id = await sessions.create({ workspaceId: ws.workspaceId })
+            if (sessions && typeof sessions.open === 'function') sessions.open(id)
+          }
+        } catch (err) { setError(String(err && err.message ? err.message : err)) }
+      }
+      function openSession(id) {
+        setError('')
+        try {
+          if (uiWorkspace && typeof uiWorkspace.openSession === 'function') uiWorkspace.openSession(id)
+          else if (sessions && typeof sessions.open === 'function') sessions.open(id)
+          else throw new Error('当前 DSH 没有暴露会话打开接口')
+        } catch (err) { setError(String(err && err.message ? err.message : err)) }
+      }
+      async function openDir(path) {
+        setError('')
+        try { await postJson(API.open, { path: path }) }
+        catch (err) { setError(errorText(err)) }
+      }
+      // 行结构照抄原生 ProjectRow / SessionRow：folder → chevron → title → hover actions
+      function rowShell(options) {
+        return h('div', {
+          key: options.rowKey,
+          className: options.className,
+          role: 'treeitem',
+          title: options.title || undefined,
+          style: options.style,
+          onClick: options.onClick,
+        },
+          h('span', { className: 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : '') }, options.icon || FolderIcon({ open: options.open })),
+          h('span', { className: 'sbw-slot sbw-chev' }, ChevronIcon({ open: options.open })),
+          options.text,
+          options.actions
+        )
+      }
+      function sessionRows(ws, key, depth) {
+        if (!isChildOpen(key)) return null
+        const ids = sessionIdsOf(ws)
+        const visible = needle ? ids.filter(matchesSession) : ids
+        const indent = { '--sbw-indent': (depth * 12) + 'px' }
+        if (!ids.length) return h('div', { className: 'sbw-empty', style: indent }, '暂无会话')
+        if (!visible.length) return null
+        const expanded = moreOpen[key] === true
+        const shown = expanded || needle ? visible : visible.slice(0, SESSION_PREVIEW)
+        const rows = shown.map(function (id) {
+          const summary = summaries[id]
+          const running = summary && (summary.status === 'running' || summary.status === 'busy' || summary.running === true)
+          const active = String(id) === activeSessionId
+          return h('div', {
+            key: key + ':' + String(id),
+            className: 'sbw-row sbw-sess' + (active ? ' selected' : ''),
+            role: 'treeitem',
+            title: sessionLabel(summary),
+            style: indent,
+            onClick: function () { openSession(id) },
+          },
+            h('span', { className: 'sbw-slot' }, h('span', { className: 'sbw-dot' + (running ? ' busy' : '') })),
+            h('span', { className: 'sbw-title' }, sessionLabel(summary)),
+            (function () {
+              const stamp = sessionStamp(summary)
+              if (!stamp) return null
+              const text = formatRelative(stamp)
+              return text ? h('span', { className: 'sbw-time' }, text) : null
+            })()
+          )
+        })
+        if (!needle && visible.length > SESSION_PREVIEW) {
+          rows.push(h('div', {
+            key: key + ':more',
+            className: 'sbw-row sbw-sess sbw-more',
+            role: 'treeitem',
+            title: expanded ? '收起会话列表' : '展开其余 ' + (visible.length - SESSION_PREVIEW) + ' 个会话',
+            style: indent,
+            onClick: function () { toggleMore(key) },
+          },
+            h('span', { className: 'sbw-slot' }),
+            h('span', { className: 'sbw-title' }, expanded ? '收起会话' : '还有 ' + (visible.length - SESSION_PREVIEW) + ' 个会话'),
+            expanded ? null : h('span', { className: 'sbw-chev sbw-chev-inline' }, ChevronIcon({ open: false }))
+          ))
+        }
+        return rows
+      }
+      function workspaceNode(ws, label, key, depth, meta) {
+        const open = isChildOpen(key)
+        const info = meta || {}
+        const child = info.child || null
+        const actions = []
+        if (info.projectId) {
+          actions.push(h('button', {
+            key: 'edit',
+            className: 'sbw-mini',
+            title: '编辑名称 / 别名 / 标签',
+            onClick: function (e) {
+              e.stopPropagation()
+              openEditDialog({ projectId: info.projectId, path: child ? child.path : ws.path })
+            },
+          }, glyph('IconEditOutlineRegular', 14, '✎')))
+          actions.push(h('button', {
+            key: 'open',
+            className: 'sbw-mini',
+            title: '在资源管理器中打开目录',
+            onClick: function (e) { e.stopPropagation(); openDir(child ? child.path : ws.path) },
+          }, glyph('IconFolderOpenRegular', 14, '▤')))
+        }
+        actions.push(h('button', {
+          key: 'new',
+          className: 'sbw-mini',
+          title: '新建会话',
+          onClick: function (e) { e.stopPropagation(); newSession(ws) },
+        }, glyph('IconNewChatOutlineRegular', 14, '＋')))
+        return h('div', { key: key },
+          rowShell({
+            className: 'sbw-row sbw-ws',
+            title: ws.path,
+            open: open,
+            style: { '--sbw-indent': (depth * 12) + 'px' },
+            onClick: function () { toggleChild(key) },
+            text: h('span', { className: 'sbw-text' },
+              h('span', { className: 'sbw-title' }, displayName(label, child && child.alias)),
+              tagChips(child && child.tags)
+            ),
+            actions: h('span', { className: 'sbw-actions' }, actions),
+          }),
+          sessionRows(ws, key, depth + 1)
+        )
+      }
+      // 子目录按相对项目根目录的路径分段聚成一棵树：同父目录（public/web、public/page）自动合并到 public 下
+      function relSegments(root, target) {
+        const a = String(root || '').split(/[\\/]+/).filter(Boolean)
+        const b = String(target || '').split(/[\\/]+/).filter(Boolean)
+        let i = 0
+        while (i < a.length && i < b.length && a[i].toLowerCase() === b[i].toLowerCase()) i++
+        return b.slice(i)
+      }
+      function childTree(project) {
+        const root = { name: project.root, path: project.path, children: new Map(), item: null }
+        for (const item of project.children) {
+          const segs = relSegments(project.path, item.child.path)
+          const parts = segs.length ? segs : [item.child.name]
+          let node = root
+          let acc = String(project.path || '').replace(/[\\/]+$/, '')
+          for (const seg of parts) {
+            acc = acc + '/' + seg
+            if (!node.children.has(seg)) node.children.set(seg, { name: seg, path: acc, children: new Map(), item: null })
+            node = node.children.get(seg)
+          }
+          node.item = item
+        }
+        return root
+      }
+      function countLeaves(node) {
+        let total = node.item ? 1 : 0
+        for (const child of node.children.values()) total += countLeaves(child)
+        return total
+      }
+      function dirNode(node, key, depth, project) {
+        const indent = { '--sbw-indent': (depth * 12) + 'px' }
+        const hasChildren = node.children.size > 0
+        if (!hasChildren) {
+          const item = node.item
+          if (!item) return null
+          if (!item.ws) {
+            return h('div', { key: key, className: 'sbw-row', role: 'treeitem', style: indent, title: 'Workspace 尚未注册或已失效，到「设置 → 项目工作区」重新注册' },
+              h('span', { className: 'sbw-slot' }, h('span', { className: 'sbw-dot busy' })),
+              h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title dim' }, node.name))
+            )
+          }
+          return workspaceNode(item.ws, node.name, key, depth, { projectId: project && project.id, child: item.child })
+        }
+        const open = isChildOpen(key)
+        const rows = []
+        rows.push(rowShell({
+          rowKey: key + ':row',
+          className: 'sbw-row sbw-dir',
+          title: node.path + ' · ' + countLeaves(node) + ' 个子工作区',
+          open: open,
+          style: indent,
+          onClick: function () { toggleChild(key) },
+          text: h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title' }, node.name)),
+          actions: h('span', { className: 'sbw-count' }, String(countLeaves(node)))
+        }))
+        if (!open) return h('div', { key: key }, rows)
+        for (const entry of Array.from(node.children.entries()).sort(function (a, b) { return a[0].localeCompare(b[0]) })) {
+          rows.push(dirNode(entry[1], key + '/' + entry[0], depth + 1, project))
+        }
+        if (node.item && node.item.ws) rows.push(workspaceNode(node.item.ws, '本目录', key + '/__self__', depth + 1, { projectId: project && project.id, child: node.item.child }))
+        return h('div', { key: key }, rows)
+      }
+      function projectNode(project) {
+        const rootOpen = isRootOpen(project.id)
+        const children = project.children.filter(function (item) {
+          if (!needle) return true
+          if (String(item.child.name).toLowerCase().indexOf(needle) >= 0) return true
+          const ws = item.ws
+          if (!ws) return false
+          return sessionIdsOf(ws).some(matchesSession)
+        })
+        if (needle && !children.length && String(project.root + ' ' + project.path).toLowerCase().indexOf(needle) < 0) return null
+        const open = needle ? true : rootOpen
+        const isRenaming = renaming === project.id
+        return h('div', { key: project.id },
+          rowShell({
+            className: 'sbw-row sbw-proj',
+            title: project.path,
+            open: open,
+            onClick: function () { if (!isRenaming) toggleRoot(project.id) },
+            text: isRenaming
+              ? h('input', {
+                className: 'sbw-input',
+                autoFocus: true,
+                value: renameValue,
+                disabled: busy,
+                onClick: function (e) { e.stopPropagation() },
+                onChange: function (e) { setRenameValue(e.target.value) },
+                onKeyDown: function (e) {
+                  if (e.key === 'Enter') { e.preventDefault(); commitRename(project) }
+                  else if (e.key === 'Escape') { e.preventDefault(); setRenaming('') }
+                },
+              })
+              : h('span', { className: 'sbw-text' },
+                h('span', { className: 'sbw-title' }, displayName(project.name || project.root, project.alias)),
+                tagChips(project.tags)
+              ),
+            actions: isRenaming
+              ? h('span', { className: 'sbw-actions show' },
+                h('button', { className: 'sbw-mini', title: '保存项目名称', disabled: busy, onClick: function (e) { e.stopPropagation(); commitRename(project) } }, glyph('IconCheckOutlineRegular', 14, '✓')),
+                h('button', { className: 'sbw-mini', title: '取消', onClick: function (e) { e.stopPropagation(); setRenaming('') } }, glyph('IconCloseOutlineRegular', 14, '✕'))
+              )
+              : h('span', { className: 'sbw-actions' },
+                h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
+                h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
+                h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path, name: project.root }) } }, glyph('IconPlusOutlineRegular', 14, '＋'))
+              ),
+          }),
+          open ? (function () {
+            const root = childTree({ root: project.root, path: project.path, children: children })
+            return Array.from(root.children.entries())
+              .sort(function (a, b) { return a[0].localeCompare(b[0]) })
+              .map(function (entry) { return dirNode(entry[1], project.id + '/d:' + entry[0], 1, project) })
+          })() : null
+        )
+      }
+      if (!wide) {
+        return h('div', { className: 'sbw sbw-rail' },
+          h('div', { className: 'sbw-hd' },
+            h('button', { className: 'sbw-ibtn', title: '展开工作区', onClick: function () { try { expandSidebar() } catch (err) { void err } } }, glyph('IconPanelLeftOutlineRegular', 16, '▤')),
+            h('button', { className: 'sbw-ibtn', title: '新增工作区', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋'))
+          )
+        )
+      }
+      const hasProjects = projects && projects.length
+      const looseVisible = needle
+        ? loose.filter(function (ws) {
+          if (String(ws.title || baseName(ws.path) || '').toLowerCase().indexOf(needle) >= 0) return true
+          return sessionIdsOf(ws).some(matchesSession)
+        })
+        : loose
+      const empty = !hasProjects && !looseVisible.length && !(legacy.length && !tree)
+      return h('div', { className: 'sbw sbw-wide' },
+        h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
+          searchOpen ? null : h('span', { className: 'sbw-hd-label' }, '工作区'),
+          searchOpen
+            ? h('div', { className: 'sbw-hd-search open' },
+              h('label', { className: 'sbw-search open' },
+                h('input', {
+                  autoFocus: true,
+                  value: query,
+                  placeholder: '搜索项目 / 工作区 / 会话',
+                  onChange: function (e) { setQuery(e.target.value) },
+                  onKeyDown: function (e) { if (e.key === 'Escape') { setQuery(''); setSearchOpen(false) } },
+                })
+              )
+            )
+            : h('div', { className: 'sbw-hd-search' },
+              h('button', {
+                className: 'sbw-ibtn',
+                title: '搜索',
+                onClick: function () { setSearchOpen(true) },
+              }, glyph('IconSearchOutlineRegular', 16, '⌕'))
+            ),
+          h('div', { className: 'sbw-hd-actions' },
+            searchOpen
+              ? h('button', { className: 'sbw-ibtn', title: '关闭搜索', onClick: function () { setQuery(''); setSearchOpen(false) } }, glyph('IconCloseOutlineRegular', 16, '✕'))
+              : null,
+            searchOpen
+              ? null
+              : h('button', { className: 'sbw-ibtn', title: '新增工作区', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋')),
+            searchOpen
+              ? null
+              : h('button', { className: 'sbw-ibtn', title: '刷新', onClick: loadTree }, glyph('IconRefreshOutlineRegular', 16, '⟳'))
+          )
+        ),
+        error ? h('div', { className: 'sbw-msg' }, error) : null,
+        h('div', { className: 'sbw-scroll' },
+          h('div', { className: 'sbw-list' },
+            empty ? h('div', { className: 'sbw-empty sbw-empty-page' },
+              '还没有工作区。点右上角 ＋ 选择目录、命名项目并勾选子目录，即可把项目拆成多个独立子工作区。') : null,
+            !empty && !hasProjects ? h('div', { className: 'sbw-hint' }, '提示：点 ＋ 新建项目，或到「设置 → 项目工作区」点「按父目录自动归组」。') : null,
+            projects ? projects.map(projectNode) : null,
+            looseVisible.length ? h('div', { className: 'sbw-loose' }, looseVisible.map(function (ws) {
+              return workspaceNode(ws, ws.title || baseName(ws.path), 'loose:' + String(ws.workspaceId), 0)
+            })) : null,
+            !tree && legacy.length ? h('div', { className: 'sbw-hint' }, '（项目接口不可用，已回退为按 Workspace 标题归组）') : null,
+            !tree ? legacy.map(function (group) {
+              const depKey = 'legacy:' + group.root
+              const rootOpen = isRootOpen(depKey) || Boolean(needle)
+              return h('div', { key: depKey },
+                rowShell({
+                  className: 'sbw-row sbw-proj',
+                  open: rootOpen,
+                  onClick: function () { toggleRoot(depKey) },
+                  text: h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title' }, group.root)),
+                }),
+                rootOpen ? group.children.map(function (item, index) {
+                  return workspaceNode(item.ws, item.child, depKey + ':' + index + ':' + String(item.ws.workspaceId), 1)
+                }) : null
+              )
+            }) : null
+          )
+        )
+      )
+    }
+    const API = {
+      state: '/dsh-project-workspaces/state',
+      scan: '/dsh-project-workspaces/scan',
+      register: '/dsh-project-workspaces/register',
+      remove: '/dsh-project-workspaces/remove',
+      project: '/dsh-project-workspaces/project',
+      projectRemove: '/dsh-project-workspaces/project/remove',
+      projectRename: '/dsh-project-workspaces/project/rename',
+      projectUpdate: '/dsh-project-workspaces/project/update',
+      open: '/dsh-project-workspaces/open',
+      autoGroup: '/dsh-project-workspaces/project/auto-group'
+    }
+    const DIALOG_CSS = '.pw{display:flex;flex-direction:column;gap:12px;padding:4px 2px 24px;font-size:13px;font-family:var(--dsw-font-family,inherit);color:var(--dsw-alias-label-primary)}' +
+      '.pw-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}' +
+      '.pw-title{margin:0 0 4px;font-size:16px;line-height:22px;font-weight:600}' +
+      '.pw-sub{margin:0;max-width:780px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
+      '.pw-card{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:var(--dsw-radius-md,12px);background:var(--dsw-alias-bg-layer-1);border:0.5px solid var(--dsw-alias-border-l2)}' +
+      '.pw-card h3{margin:0;font-size:13px;font-weight:600}' +
+      '.pw-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}' +
+      '.pw-input{flex:1 1 320px;min-width:220px;box-sizing:border-box;height:32px;padding:0 10px;border:0.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-specific-input-major,var(--dsw-alias-button-elevated-fill,transparent));color:var(--dsw-alias-label-primary);font-family:inherit;font-size:13px;outline:none}' +
+      '.pw-input:focus{border-color:var(--dsw-alias-state-business-primary)}' +
+      '.pw-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 14px;border:0.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-primary);font-family:inherit;font-size:13px;cursor:pointer}' +
+      '.pw-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-btn.primary{border-color:transparent;background:var(--dsw-alias-button-primary-fill,#4d6bfe);color:var(--dsw-alias-label-on-color,#fff)}' +
+      '.pw-btn.primary:hover{background:var(--dsw-alias-button-primary-hover)}' +
+      '.pw-btn:disabled{opacity:.45;cursor:not-allowed}' +
+      '.pw-list{display:flex;flex-direction:column;gap:4px}' +
+      '.pw-dir,.pw-ws{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 8px;border-radius:var(--dsw-radius-sm,8px);font-size:13px;line-height:20px}' +
+      '.pw-dir{cursor:pointer;user-select:none}' +
+      '.pw-dir:hover,.pw-ws:hover{background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-dir input[type=checkbox]{flex:none;width:14px;height:14px;margin:0;accent-color:var(--dsw-alias-brand-primary)}' +
+      '.pw-ws{justify-content:space-between;gap:12px}' +
+      '.pw-dir b{font-weight:500}' +
+      '.pw-muted{color:var(--dsw-alias-label-tertiary)}' +
+      '.pw-field .pw-muted{margin-top:6px;font-size:12px;line-height:18px}' +
+      '.pw-path{font-family:var(--ds-font-family-code,ui-monospace,Consolas,monospace);font-size:11px;line-height:16px;word-break:break-all;color:var(--dsw-alias-label-tertiary)}' +
+      '.pw-tag{flex:none;padding:0 6px;border-radius:var(--dsw-radius-xs,4px);font-size:11px;line-height:18px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-msg{padding:8px 10px;border-radius:var(--dsw-radius-md,12px);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-msg.err{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent)}' +
+      '.pw-project{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:var(--dsw-radius-md,12px);border:0.5px solid var(--dsw-alias-border-l2)}' +
+      '.pw-project-head{display:flex;align-items:center;justify-content:space-between;gap:10px}' +
+      '.pw-child{display:flex;align-items:center;gap:8px;margin-left:12px;padding:4px 8px;border-radius:var(--dsw-radius-sm,8px);font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-modal{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.28))}' +
+      '.pw-modal-card{display:flex;flex-direction:column;gap:14px;width:min(560px,calc(100vw - 48px));max-height:min(80vh,720px);box-sizing:border-box;padding:18px 20px 16px;border-radius:var(--dsw-radius-xl,20px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2);box-shadow:var(--dsw-elevation-prominent,0 12px 32px rgba(0,0,0,.18));font-family:var(--dsw-font-family,inherit)}' +
+      '.pw-modal-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}' +
+      '.pw-modal-title{margin:0 0 2px;font-size:16px;line-height:22px;font-weight:600}' +
+      '.pw-modal-sub{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
+      '.pw-close{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}' +
+      '.pw-close:hover{background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-field{display:flex;flex-direction:column;gap:6px}' +
+      '.pw-label{font-size:12px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-secondary)}' +
+      '.pw-control{display:flex;align-items:center;gap:8px;min-width:0}' +
+      '.pw-field .pw-input{flex:1 1 auto;width:100%;min-width:0}' +
+      '.pw-dirs{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md,12px)}' +
+      '.pw-footer{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:2px}' +
+      '.pw-footer-actions{display:flex;align-items:center;gap:8px}'
+    const CSS = SIDEBAR_CSS + DIALOG_CSS
+
+    async function request(url, init) {
+      const response = await fetch(url, Object.assign({ credentials: 'same-origin' }, init || {}))
+      const body = await response.json().catch(function () { return {} })
+      if (!response.ok || body.ok === false) throw new Error(body.error || ('请求失败：' + response.status))
+      return body
+    }
+    function postJson(url, payload) {
+      return request(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload || {}) })
+    }
+    function errorText(err) {
+      return String(err && err.message ? err.message : err)
+    }
+    function samePath(a, b) {
+      return String(a || '').replace(/[\\/]+$/, '').toLowerCase() === String(b || '').replace(/[\\/]+$/, '').toLowerCase()
+    }
+    function notifyChanged() {
+      if (typeof window === 'undefined') return
+      try { window.dispatchEvent(new CustomEvent(CHANGED_EVENT)) } catch (err) { void err }
+    }
+    function CreateDialog(props) {
+      ensureStyle()
+      const services = props.services || {}
+      const ui = services.uiWorkspace
+      const [root, setRoot] = useState(props.initialRoot || '')
+      const [name, setName] = useState(props.initialName || '')
+      const [dirs, setDirs] = useState(null)
+      const [picked, setPicked] = useState({})
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const [message, setMessage] = useState('')
+      function toggle(path) {
+        setPicked(function (prev) { const next = Object.assign({}, prev); next[path] = !next[path]; return next })
+      }
+      async function browse() {
+        if (!ui || typeof ui.pickDirectory !== 'function') { setError('当前 DSH 没有暴露目录选择器，请直接输入路径'); return }
+        setError('')
+        try {
+          const dir = await ui.pickDirectory()
+          if (!dir) return
+          setRoot(dir)
+          if (!name.trim()) setName(baseName(dir))
+          setDirs(null)
+          setPicked({})
+        } catch (err) { setError(errorText(err)) }
+      }
+      async function scan() {
+        const path = String(root || '').trim()
+        if (!path) { setError('先选择或输入项目根目录'); return }
+        setBusy(true); setError(''); setMessage('')
+        try {
+          const body = await postJson(API.scan, { root: path })
+          const roots = body.roots || []
+          let found = null
+          for (const item of roots) { if (samePath(item.root, path)) { found = item; break } }
+          if (!found) found = roots[roots.length - 1] || null
+          const list = (found && found.dirs) || []
+          setDirs(list)
+          if (found && found.error) setError(found.error)
+          if (!name.trim()) setName(baseName((found && found.root) || path))
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      async function submit() {
+        const path = String(root || '').trim()
+        if (!path) { setError('先选择或输入项目根目录'); return }
+        if (dirs === null) { setError('先扫描子目录'); return }
+        const names = (dirs || []).filter(function (dir) { return picked[dir.path] }).map(function (dir) { return dir.name })
+        if (!names.length) { setError('至少勾选一个子目录作为子工作区'); return }
+        setBusy(true); setError(''); setMessage('')
+        try {
+          const body = await postJson(API.project, { root: path, name: name.trim() || baseName(path), children: names })
+          notifyChanged()
+          if (props.onCreated) props.onCreated(body.project, body.state)
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      const selectedCount = (dirs || []).filter(function (dir) { return !!picked[dir.path] }).length
+      const canSubmit = !busy && !!String(root || '').trim() && dirs !== null && selectedCount > 0
+      function onNameKey(event) {
+        if (event.key !== 'Enter') return
+        event.preventDefault()
+        if (dirs === null) scan()
+        else submit()
+      }
+      return h('div', { className: 'pw-modal', onClick: props.onClose },
+        h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+          h('div', { className: 'pw-modal-head' },
+            h('div', null,
+              h('h3', { className: 'pw-modal-title' }, props.title || '新增工作区'),
+              h('div', { className: 'pw-modal-sub' }, '选一个项目根目录并命名，再勾选要拆成独立子工作区的子目录')
+            ),
+            h('button', { className: 'pw-close', title: '关闭', onClick: props.onClose }, glyph('IconCloseOutlineRegular', 16, '×'))
+          ),
+          error ? h('div', { className: 'pw-msg err' }, error) : null,
+          message ? h('div', { className: 'pw-msg' }, message) : null,
+          h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, '项目目录'),
+            h('div', { className: 'pw-control' },
+              h('input', {
+                className: 'pw-input',
+                placeholder: '例如 D:\\www\\public 或 /home/www/public',
+                value: root,
+                onChange: function (e) { setRoot(e.target.value); setDirs(null); setPicked({}) },
+                onKeyDown: function (e) { if (e.key === 'Enter') { e.preventDefault(); scan() } },
+              }),
+              h('button', { className: 'pw-btn', disabled: busy, onClick: browse }, glyph('IconFolderOpenRegular', 16), '浏览…'),
+              h('button', { className: 'pw-btn', disabled: busy, onClick: scan }, glyph('IconRefreshOutlineRegular', 16), busy ? '扫描中…' : '扫描')
+            )
+          ),
+          h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, '项目名称'),
+            h('input', {
+              className: 'pw-input',
+              placeholder: '默认取目录名，例如 public',
+              value: name,
+              onChange: function (e) { setName(e.target.value) },
+              onKeyDown: onNameKey,
+            })
+          ),
+          h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, dirs === null ? '子工作区' : '子工作区（已选 ' + selectedCount + ' / 共 ' + dirs.length + '）'),
+            dirs === null
+              ? h('div', { className: 'pw-msg' }, '选择目录后点「扫描」，勾选要独立成子工作区的子目录。只列出直接子目录，不自动创建。')
+              : dirs.length
+                ? h('div', null,
+                  h('div', { className: 'pw-dirs' }, dirs.map(function (dir) {
+                    return h('label', { className: 'pw-dir', key: dir.path },
+                      h('input', { type: 'checkbox', checked: !!picked[dir.path], disabled: busy, onChange: function () { toggle(dir.path) } }),
+                      h('b', null, dir.name),
+                      h('span', { className: 'pw-path' }, dir.path),
+                      dir.registered ? h('span', { className: 'pw-tag' }, '已注册·复用') : null
+                    )
+                  })),
+                  h('div', { className: 'pw-muted' }, '同一父目录下的子工作区（如 public/web、public/page）会在侧边栏自动合并到一个目录节点里。')
+                )
+                : h('div', { className: 'pw-msg' }, '该目录下没有子目录')
+          ),
+          h('div', { className: 'pw-footer' },
+            h('div', { className: 'pw-muted' }, selectedCount ? '将创建 ' + selectedCount + ' 个独立子工作区' : '至少勾选一个子目录'),
+            h('div', { className: 'pw-footer-actions' },
+              h('button', { className: 'pw-btn', disabled: busy, onClick: props.onClose }, '取消'),
+              h('button', { className: 'pw-btn primary', disabled: !canSubmit, onClick: submit }, busy ? '创建中…' : '创建工作区')
+            )
+          )
+        )
+      )
+    }
+    function EditDialog(props) {
+      ensureStyle()
+      const project = props.project
+      const child = props.child || null
+      const [name, setName] = useState(project.name || project.root || '')
+      const [alias, setAlias] = useState(child ? (child.alias || '') : (project.alias || ''))
+      const [tags, setTags] = useState(((child ? child.tags : project.tags) || []).join(', '))
+      const [busy, setBusy] = useState(false)
+      const [error, setError] = useState('')
+      const target = child ? child.path : project.path
+      const base = child ? child.name : (project.name || project.root)
+      const parsedTags = String(tags || '').split(/[,\uFF0C;\uFF1B]/).map(function (tag) { return tag.trim() }).filter(Boolean)
+      const preview = displayName(base, alias)
+      async function openFolder() {
+        try { await postJson(API.open, { path: target }) } catch (err) { setError(errorText(err)) }
+      }
+      async function save() {
+        if (busy) return
+        if (!child && !String(name).trim()) { setError('项目名称不能为空'); return }
+        setBusy(true); setError('')
+        try {
+          const payload = { projectId: project.id, alias: alias, tags: parsedTags }
+          if (child) payload.children = [{ path: child.path, alias: alias, tags: parsedTags }]
+          else payload.name = String(name).trim()
+          await postJson(API.projectUpdate, payload)
+          notifyChanged()
+          props.onSaved()
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      return h('div', { className: 'pw-modal', onClick: props.onClose },
+        h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+          h('div', { className: 'pw-modal-head' },
+            h('div', null,
+              h('h3', { className: 'pw-modal-title' }, child ? '编辑子工作区' : '编辑项目'),
+              h('div', { className: 'pw-modal-sub' }, '别名和标签只影响侧边栏显示，不改磁盘目录名。')
+            ),
+            h('button', { className: 'pw-close', title: '关闭', onClick: props.onClose }, glyph('IconCloseOutlineRegular', 16, '\u00D7'))
+          ),
+          error ? h('div', { className: 'pw-msg err' }, error) : null,
+          h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, '目录'),
+            h('div', { className: 'pw-control' },
+              h('input', { className: 'pw-input', value: target, readOnly: true }),
+              h('button', { className: 'pw-btn', onClick: openFolder }, glyph('IconFolderOpenRegular', 16), '打开目录')
+            )
+          ),
+          child ? null : h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, '项目名称'),
+            h('input', {
+              className: 'pw-input',
+              value: name,
+              placeholder: '例如 public',
+              onChange: function (e) { setName(e.target.value) },
+            })
+          ),
+          h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, '别名'),
+            h('input', {
+              className: 'pw-input',
+              value: alias,
+              placeholder: '显示成 public(学位申报系统) 里的括号内容，留空则不显示',
+              onChange: function (e) { setAlias(e.target.value) },
+            })
+          ),
+          h('div', { className: 'pw-field' },
+            h('label', { className: 'pw-label' }, '标签'),
+            h('input', {
+              className: 'pw-input',
+              value: tags,
+              placeholder: '用逗号分隔，例如 PHP, CI4, 前端',
+              onChange: function (e) { setTags(e.target.value) },
+            }),
+            h('div', { className: 'pw-muted' }, parsedTags.length ? '将显示 ' + parsedTags.length + ' 个标签' : '不设置标签')
+          ),
+          h('div', { className: 'pw-footer' },
+            h('div', { className: 'pw-muted' }, '侧边栏显示：' + preview),
+            h('div', { className: 'pw-footer-actions' },
+              h('button', { className: 'pw-btn', disabled: busy, onClick: props.onClose }, '取消'),
+              h('button', { className: 'pw-btn primary', disabled: busy, onClick: save }, busy ? '保存中…' : '保存')
+            )
+          )
+        )
+      )
+    }
+    function OverlayHost(props) {
+      const createPair = useCreateDialogSeed()
+      const editPair = useEditDialogSeed()
+      const seed = createPair[0]
+      const setSeed = createPair[1]
+      const editSeed = editPair[0]
+      const setEditSeed = editPair[1]
+      const [editData, setEditData] = useState(null)
+      useEffect(function () {
+        if (!editSeed) { setEditData(null); return undefined }
+        let alive = true
+        setEditData(null)
+        request(API.state).then(function (body) {
+          if (!alive) return
+          const project = (body.projects || []).find(function (item) { return item.id === editSeed.projectId })
+          if (!project) { setEditData({ error: '项目不存在，可能已被移除' }); return }
+          const path = editSeed.path || ''
+          const isProject = samePath(path, project.path) || samePath(path, project.root)
+          const child = isProject ? null : (project.children || []).find(function (item) { return samePath(item.path, path) })
+          if (!isProject && !child) { setEditData({ error: '子工作区不存在，可能在设置页被移除' }); return }
+          setEditData({ project: project, child: child })
+        }).catch(function (err) { if (alive) setEditData({ error: errorText(err) }) })
+        return function () { alive = false }
+      }, [editSeed])
+      if (seed) {
+        return h(CreateDialog, {
+          services: props.services,
+          title: seed.root ? '添加子工作区' : '新增工作区',
+          initialRoot: seed.root || '',
+          initialName: seed.name || '',
+          onClose: function () { setSeed(null) },
+          onCreated: function () { setSeed(null) }
+        })
+      }
+      if (editSeed) {
+        if (!editData) return null
+        if (editData.error) {
+          return h('div', { className: 'pw-modal', onClick: function () { setEditSeed(null) } },
+            h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+              h('div', { className: 'pw-modal-head' },
+                h('div', null, h('h3', { className: 'pw-modal-title' }, '编辑目录')),
+                h('button', { className: 'pw-close', title: '关闭', onClick: function () { setEditSeed(null) } }, glyph('IconCloseOutlineRegular', 16, '\u00D7'))
+              ),
+              h('div', { className: 'pw-msg err' }, editData.error)
+            )
+          )
+        }
+        return h(EditDialog, {
+          project: editData.project,
+          child: editData.child,
+          onClose: function () { setEditSeed(null) },
+          onSaved: function () { setEditSeed(null) }
+        })
+      }
+      return null
+    }
+
+    function Panel(props) {
+      ensureStyle()
+      const [state, setState] = useState(null)
+      const [root, setRoot] = useState('')
+      const [picked, setPicked] = useState({})
+      const [busy, setBusy] = useState(false)
+      const [dialog, setDialog] = useState(false)
+      const [error, setError] = useState('')
+      const [message, setMessage] = useState('')
+      async function load() {
+        try { setState(await request(API.state)); setError('') } catch (err) { setError(errorText(err)) }
+      }
+      useEffect(function () { load() }, [])
+      async function scan() {
+        if (!root.trim()) return
+        setBusy(true); setError(''); setMessage('')
+        try { const body = await postJson(API.scan, { root: root.trim() }); setState(body); setPicked({}) }
+        catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      async function register(rootPath, dirs) {
+        const names = dirs.filter(function (d) { return picked[d.path] }).map(function (d) { return d.name })
+        if (!names.length) { setError('先勾选要注册的子目录'); return }
+        setBusy(true); setError(''); setMessage('')
+        try {
+          const body = await postJson(API.register, { root: rootPath, subdirs: names })
+          setState(body.state); setPicked({}); setMessage('已注册 ' + body.created.length + ' 个 Workspace；左侧工作区列表会出现对应子目录。')
+          notifyChanged()
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      async function remove(workspaceId) {
+        setBusy(true); setError(''); setMessage('')
+        try { const body = await postJson(API.remove, { workspaceId: workspaceId }); setState(body.state); setMessage('已移除 Workspace 注册，目录和会话历史未删除。'); notifyChanged() }
+        catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      async function removeProject(projectId) {
+        setBusy(true); setError(''); setMessage('')
+        try { const body = await postJson(API.projectRemove, { projectId: projectId }); setState(body.state); setMessage('已移出项目树，Workspace 注册和会话历史都保留。'); notifyChanged() }
+        catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      async function autoGroup() {
+        setBusy(true); setError(''); setMessage('')
+        try {
+          const body = await postJson(API.autoGroup, { minChildren: 2 })
+          setState(body.state)
+          const created = body.created || []
+          const updated = body.updated || []
+          setMessage(!created.length && !updated.length
+            ? '没有需要归组的 Workspace（同一父目录下至少要有 2 个已注册子目录）。'
+            : '已按父目录归组：新建 ' + created.length + ' 个项目' + (created.length ? '（' + created.join('、') + '）' : '') + (updated.length ? '，并入 ' + updated.length + ' 个已有项目' : '') + '。')
+          notifyChanged()
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
+      if (!state) return h('div', { className: 'pw' }, h('h2', { className: 'pw-title' }, '项目工作区（子目录会话）'), h('div', { className: 'pw-muted' }, '正在读取…'))
+      const roots = state.roots || []
+      const workspaces = state.workspaces || []
+      const projects = state.projects || []
+      return h('div', { className: 'pw' },
+        h('div', { className: 'pw-head' },
+          h('div', null,
+            h('h2', { className: 'pw-title' }, '项目工作区（子目录会话）'),
+            h('p', { className: 'pw-sub' }, '一个项目 = 根目录 + 若干独立子工作区。点「新增工作区」选目录、命名并勾选子目录；左侧工作区面板按 项目 → 子工作区 → 会话 展示。')
+          ),
+          h('div', { className: 'pw-row' },
+            h('button', { className: 'pw-btn primary', onClick: function () { setDialog(true) } }, '＋ 新增工作区'),
+            h('button', { className: 'pw-btn', disabled: busy, onClick: autoGroup }, '按父目录自动归组'),
+            h('button', { className: 'pw-btn', onClick: load }, '刷新')
+          )
+        ),
+        error ? h('div', { className: 'pw-msg err' }, error) : null,
+        message ? h('div', { className: 'pw-msg' }, message) : null,
+        h('div', { className: 'pw-card' },
+          h('h3', null, '项目（根目录 → 子工作区）'),
+          projects.length
+            ? h('div', { className: 'pw-list' }, projects.map(function (project) {
+              return h('div', { className: 'pw-project', key: project.id },
+                h('div', { className: 'pw-project-head' },
+                  h('div', null,
+                    h('div', null, h('b', null, project.name), h('span', { className: 'pw-muted' }, '  ' + project.children.length + ' 个子工作区')),
+                    h('div', { className: 'pw-path' }, project.root)
+                  ),
+                  h('div', { className: 'pw-row' },
+                    h('button', { className: 'pw-btn', disabled: busy, onClick: function () { openCreateDialog({ root: project.root, name: project.name }) } }, '添加子工作区'),
+                    h('button', { className: 'pw-btn', disabled: busy, onClick: function () { removeProject(project.id) } }, '移出项目树')
+                  )
+                ),
+                project.children.length
+                  ? project.children.map(function (child) {
+                    return h('div', { className: 'pw-child', key: child.path },
+                      h('b', null, child.name),
+                      h('span', { className: 'pw-path' }, child.path),
+                      child.registered ? h('span', { className: 'pw-muted' }, child.sessionCount + ' 个会话') : h('span', { className: 'pw-muted' }, 'Workspace 已失效'),
+                      child.workspaceId ? h('button', { className: 'pw-btn', disabled: busy, onClick: function () { remove(child.workspaceId) } }, '移除注册') : null
+                    )
+                  })
+                  : h('div', { className: 'pw-muted' }, '还没有子工作区')
+              )
+            }))
+            : h('div', { className: 'pw-muted' }, '还没有项目。点右上角「＋ 新增工作区」开始。')
+        ),
+        h('div', { className: 'pw-card' },
+          h('h3', null, '手动注册子目录'),
+          h('div', { className: 'pw-row' },
+            h('input', { className: 'pw-input', placeholder: '例如 D:\\www\\public 或 /home/www/public', value: root, onChange: function (e) { setRoot(e.target.value) }, onKeyDown: function (e) { if (e.key === 'Enter') scan() } }),
+            h('button', { className: 'pw-btn', disabled: busy, onClick: scan }, busy ? '扫描中…' : '扫描子目录')
+          ),
+          h('div', { className: 'pw-muted' }, '只扫描直接子目录；不存在的目录不会被注册，也不会自动创建。')
+        ),
+        roots.map(function (item) {
+          const dirs = item.dirs || []
+          const selectedCount = dirs.filter(function (d) { return picked[d.path] }).length
+          return h('div', { className: 'pw-card', key: item.root },
+            h('div', { className: 'pw-row', style: { justifyContent: 'space-between' } },
+              h('div', null, h('h3', null, item.root), h('div', { className: 'pw-muted' }, item.error || (dirs.length + ' 个直接子目录'))),
+              h('button', { className: 'pw-btn primary', disabled: busy || !selectedCount, onClick: function () { register(item.root, dirs) } }, '注册选中（' + selectedCount + '）')
+            ),
+            item.error ? null : h('div', { className: 'pw-list' }, dirs.map(function (dir) {
+              return h('label', { className: 'pw-dir', key: dir.path },
+                h('input', { type: 'checkbox', checked: !!picked[dir.path], disabled: busy, onChange: function () { setPicked(function (prev) { var next = Object.assign({}, prev); next[dir.path] = !next[dir.path]; return next }) } }),
+                h('b', null, dir.name),
+                h('span', { className: 'pw-path' }, dir.path),
+                dir.registered ? h('span', { className: 'pw-muted' }, '已注册·复用') : null
+              )
+            }))
+          )
+        }),
+        h('div', { className: 'pw-card' },
+          h('h3', null, '已注册 Workspace'),
+          workspaces.length ? h('div', { className: 'pw-list' }, workspaces.map(function (ws) {
+            return h('div', { className: 'pw-ws', key: ws.workspaceId },
+              h('div', null, h('div', null, h('b', null, ws.title)), h('div', { className: 'pw-path' }, ws.path), h('div', { className: 'pw-muted' }, ws.sessionCount + ' 个会话')),
+              h('button', { className: 'pw-btn', disabled: busy, onClick: function () { remove(ws.workspaceId) } }, '移除注册')
+            )
+          })) : h('div', { className: 'pw-muted' }, '还没有注册 Workspace。')
+        ),
+        h('div', { className: 'pw-card' },
+          h('h3', null, '已知限制'),
+          h('div', { className: 'pw-muted' }, '原生 Workspace 的会话 cwd 必须等于 Workspace 路径，所以层级只做在插件与侧边栏：「项目 → 子工作区」是展示上的树，DSH 底层仍是多个独立 Workspace；每个会话的沙箱写入边界仍是各自子目录。')
+        ),
+        dialog ? h(CreateDialog, {
+          services: props.services,
+          title: '新增工作区',
+          onClose: function () { setDialog(false) },
+          onCreated: function (project, nextState) { setDialog(false); if (nextState) setState(nextState); else load(); setMessage('已创建项目「' + project.name + '」，共 ' + project.children.length + ' 个子工作区。') }
+        }) : null
+      )
+    }
+    function apply(ctx) {
+      const sessions = ctx.get('sessions')
+      const workspaces = ctx.get('workspaces')
+      const uiWorkspace = ctx.get('uiWorkspace')
+      const services = { uiWorkspace: uiWorkspace, workspaces: workspaces }
+      if (sessions && workspaces) {
+        ctx.slots.inject('sidebar.workspaces', function () {
+          return ctx.slots.register({
+            name: 'sidebar.workspaces',
+            priority: -100,
+            inject: function () { return { sessions: sessions, workspaces: workspaces, uiWorkspace: uiWorkspace } },
+          }, function (props) {
+            return h(SidebarBrowser, Object.assign({}, props, { sessions: sessions, workspaces: workspaces, uiWorkspace: uiWorkspace }))
+          })
+        })
+      }
+      ctx.slots.inject('settings.section', function () {
+        return ctx.slots.register({
+          name: 'settings.section',
+          id: NS,
+          order: 64,
+          label: function () { return '项目工作区' },
+          inject: function () { return { services: services } },
+        }, function (props) { return h(Panel, { services: (props && props.services) || services }) })
+      })
+      ctx.slots.inject('shell.overlay', function () {
+        return ctx.slots.register({ name: 'shell.overlay', id: NS + '-create', order: 80 }, function () {
+          return h(OverlayHost, { services: services })
+        })
+      })
+    }
+    exports.name = NS
+    exports.inject = ['slots', 'sessions', 'workspaces', 'uiWorkspace']
+    exports.apply = apply
+    return module.exports
+  },
+})

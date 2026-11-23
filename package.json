@@ -1,0 +1,40 @@
+{
+  "name": "dsh-project-workspaces",
+  "version": "0.1.0",
+  "private": true,
+  "description": "项目工作区：把项目根目录下的子目录注册为 DSH 原生 Workspace，并提供替换原生工作区栏的侧边栏（项目 → 子工作区 → 会话）与「新增工作区」弹窗。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "ds-harness",
+    "plugin",
+    "workspace",
+    "project",
+    "sidebar"
+  ],
+  "files": [
+    "lib",
+    "client",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {}
+}
