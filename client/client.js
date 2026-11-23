@@ -1180,9 +1180,8 @@ window.__ModuleLoader__.load({
       async function submit() {
         const path = String(root || '').trim()
         if (!path) { setError('先选择或输入项目根目录'); return }
-        if (dirs === null) { setError('先扫描子目录'); return }
+        // 不扫描也能创建：没有勾选子目录时，只把项目根目录注册成一个工作区
         const names = (dirs || []).filter(function (dir) { return picked[dir.path] }).map(function (dir) { return dir.name })
-        if (!names.length) { setError('至少勾选一个子目录作为子工作区'); return }
         setBusy(true); setError(''); setMessage('')
         try {
           const body = await postJson(API.project, { root: path, name: name.trim() || baseName(path), children: names })
@@ -1191,19 +1190,18 @@ window.__ModuleLoader__.load({
         } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
       }
       const selectedCount = (dirs || []).filter(function (dir) { return !!picked[dir.path] }).length
-      const canSubmit = !busy && !!String(root || '').trim() && dirs !== null && selectedCount > 0
+      const canSubmit = !busy && !!String(root || '').trim()
       function onNameKey(event) {
         if (event.key !== 'Enter') return
         event.preventDefault()
-        if (dirs === null) scan()
-        else submit()
+        if (canSubmit) submit()
       }
       return h('div', { className: 'pw-modal', onClick: props.onClose },
         h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
               h('h3', { className: 'pw-modal-title' }, props.title || '新增工作区'),
-              h('div', { className: 'pw-modal-sub' }, '选一个项目根目录并命名，再勾选要拆成独立子工作区的子目录')
+              h('div', { className: 'pw-modal-sub' }, '选项目根目录并命名即可创建；想拆子工作区再点「扫描」勾选')
             ),
             h('button', { className: 'pw-close', title: '关闭', onClick: props.onClose }, glyph('IconCloseOutlineRegular', 16, '×'))
           ),
@@ -1236,7 +1234,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'pw-field' },
             h('label', { className: 'pw-label' }, dirs === null ? '子工作区' : '子工作区（已选 ' + selectedCount + ' / 共 ' + dirs.length + '）'),
             dirs === null
-              ? h('div', { className: 'pw-msg' }, '选择目录后点「扫描」，勾选要独立成子工作区的子目录。只列出直接子目录，不自动创建。')
+              ? h('div', { className: 'pw-msg' }, '可选：点「扫描」列出直接子目录并勾选。不扫描也行，那样只把项目根目录本身注册成一个工作区。')
               : dirs.length
                 ? h('div', null,
                   h('div', { className: 'pw-dirs' }, dirs.map(function (dir) {
@@ -1252,7 +1250,7 @@ window.__ModuleLoader__.load({
                 : h('div', { className: 'pw-msg' }, '该目录下没有子目录')
           ),
           h('div', { className: 'pw-footer' },
-            h('div', { className: 'pw-muted' }, selectedCount ? '将创建 ' + selectedCount + ' 个独立子工作区' : '至少勾选一个子目录'),
+            h('div', { className: 'pw-muted' }, selectedCount ? '将创建 ' + selectedCount + ' 个独立子工作区' : '将只注册项目根目录（1 个工作区）'),
             h('div', { className: 'pw-footer-actions' },
               h('button', { className: 'pw-btn', disabled: busy, onClick: props.onClose }, '取消'),
               h('button', { className: 'pw-btn primary', disabled: !canSubmit, onClick: submit }, busy ? '创建中…' : '创建工作区')
