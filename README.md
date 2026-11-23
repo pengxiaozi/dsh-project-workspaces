@@ -69,9 +69,9 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
   - 行高 32px、圆角 `--dsw-radius-md`、行内起点 `calc(var(--dsh-sidebar-row-padding) - var(--dsh-sidebar-paint-inset) + 缩进)`、行间 2px、分组间 4px
   - 行内只有「图标槽 16×20 + 标题（14px / 20px）」：默认显示文件夹图标，**hover 时切换成三角箭头**（和原生一致，不额外占位）
   - 所有操作按钮（`✎` 重命名、`＋` 新建会话 / 添加子工作区）**只在 hover 时出现**，24×24、`margin:-4px`，不做常驻按钮
-  - 会话行：状态点 6px 占同一个 16px 图标位，标题缩进一级，右侧显示相对时间（`刚刚` / `N 分钟` / `N 小时` / `N 天`，10px `label-tertiary`）
+  - 会话行：左侧是原生 `StateDot` 状态位（占 16px 图标位）——进行中是旋转圆环（`ongoing`）、等你处理是琥珀点（`warning`）、刚跑完未看是绿点（`done`）、其余是灰点（`idle`）；标题缩进一级，右侧显示相对时间（`刚刚` / `N 分钟` / `N 小时` / `N 天`，10px `label-tertiary`），有待处理交互时这一格换成 `待批准` / `待确认` / `待回答`
   - 标题栏 36px、`justify-content:flex-end`、图标按钮 28×28（`--dsw-radius-sm`）、rail 模式 36×36
-  - 路径、数量、「未注册」等副信息不单独占一行：路径进 `title` 悬停提示，未注册子目录用暗色文字 + 黄色状态点
+  - 路径、数量、「未注册」等副信息不单独占一行：路径进 `title` 悬停提示，未注册子目录用暗色文字 + 琥珀色状态点
 - 项目节点：点击展开/收起；hover 出 `✎`（编辑弹窗：项目名称 / 别名 / 标签）、`▤`（在资源管理器中打开项目根目录）与 `＋`（添加子工作区，事件 detail 带 `{root, name}`）
 - 重命名项目会同时把该项目的子 Workspace 原生标题改成 `新名称 / 子目录名`
 - 子工作区节点：点击展开会话，hover 出 `✎`（编辑别名 / 标签）、`▤`（打开该子目录）、`＋` 新建会话（`uiWorkspace.startSession`）；会话行点击直接打开（`uiWorkspace.openSession`），当前会话高亮
@@ -85,7 +85,8 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **叶子项目**：没有子工作区的项目直接把自己注册成一个 Workspace，侧边栏里点它就能开会话，不需要先扫描
 - **别名可留空**：别名只是侧边栏上的补充说明，留空就显示项目名称本身
 - **当前会话高亮 + 自动滚动**：正在用的会话在侧边栏里始终有品牌色底 + 左侧 2px 竖条 + 品牌色标题；打开/切换会话时侧边栏自动滚到它，被折叠的工作区与目录、以及超过 6 条的会话列表都会为它自动展开
-- **会话完成提示**：侧边栏通过槽位给的 `useSessionStatus` 订阅会话状态，某个会话从「进行中」变成「完成」时，右下角浮出提示条（`已完成`，绿色对勾），变成「等待处理」时浮出橙色提示（`等待你处理`）；提示条 6 秒自动消失，点击直接打开该会话，同一会话只保留最新一条
+- **会话完成提示**：侧边栏订阅槽位给的 `useSessionStatus`（它的快照是 `ReadonlyMap<SessionId, { running, pendingInteraction, completionUnread }>`），当某个会话的 `completionUnread` 由 false 变 true（跑完且不在主视图）时右下角浮出提示条（`已完成`，绿色对勾）；`pendingInteraction` 出现时浮出橙色提示（`等待你处理`）。提示条 6 秒自动消失，点击直接打开该会话，同一会话只保留最新一条
+- **会话重命名**：会话行 hover 出 `✎`，就地变成输入框，回车保存 / Esc 取消；走原生 `SessionFace.rename`（`sessions.using(id, { source: 'workspaceOperation' }, ref => ref.binding.session.rename(title))`），成功后侧边栏与原生列表同步更新
 - **同父目录自动合并**：子工作区按相对项目根的路径分段聚成树，`public/web`、`public/page` 只出现一个 `public` 节点（右侧显示子工作区数量）
 - **会话折叠**：单个工作区最多铺 6 行会话，多出来折成「还有 N 个会话」（展开后可「收起会话」），搜索命中时不受折叠限制
 - 不属于任何项目的 Workspace **平铺在项目之后**（上方一条分隔线），不用分组标题；点开照样能看会话、新建会话

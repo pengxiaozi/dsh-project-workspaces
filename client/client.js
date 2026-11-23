@@ -66,8 +66,13 @@ window.__ModuleLoader__.load({
       '.sbw-sess.selected::before{content:"";position:absolute;top:7px;bottom:7px;left:6px;width:2px;border-radius:1px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-sess.selected .sbw-title{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
       '.sbw-sess.selected .sbw-time{color:var(--dsw-alias-brand-primary,#4d6bfe);opacity:.8}',
-      '.sbw-dot{flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;color:var(--dsw-alias-state-idle-primary,var(--dsw-alias-label-tertiary))}',
-      '.sbw-dot.busy{color:var(--dsw-alias-state-warn-primary,var(--dsw-alias-label-tertiary))}',
+      '.sbw-dot{flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}',
+      '.sbw-dot.ongoing{width:8px;height:8px;background:transparent;border:1.5px solid var(--dsw-alias-state-business-primary,#4d6bfe);border-top-color:transparent;animation:sbw-spin .8s linear infinite}',
+      '.sbw-dot.warning{color:var(--dsw-alias-state-warn-primary,#c98a00)}',
+      '.sbw-dot.done{color:var(--dsw-alias-state-success-primary,#2ea043)}',
+      '@keyframes sbw-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}',
+      '.sbw-trail{flex:none;font-size:10px;line-height:16px;color:var(--dsw-alias-state-warn-primary,#c98a00);margin-inline-end:-1px}',
+      '.sbw-input.sbw-input-sess{flex:1;min-width:0;margin:0 6px;height:24px;font-size:13px}',
       '.sbw-time{flex:none;margin-left:auto;font-size:10px;line-height:16px;color:var(--dsw-alias-label-tertiary);margin-inline-end:-1px}',
       '.sbw-empty-page{padding:16px 12px;font-size:13px;line-height:20px}',
       '.sbw-empty{padding:8px 12px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) + var(--sbw-indent,0px));color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
@@ -285,6 +290,9 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false)
       const [dragId, setDragId] = useState('')
       const [dropHint, setDropHint] = useState(null)
+      const [renamingSession, setRenamingSession] = useState('')
+      const [sessionRenameValue, setSessionRenameValue] = useState('')
+      const [sessionRenameBusy, setSessionRenameBusy] = useState(false)
       const scrollRef = React.useRef(null)
       const sessionNodes = React.useRef({})
       async function commitRename(project) {
@@ -514,30 +522,81 @@ window.__ModuleLoader__.load({
         const summary = summaries[id]
         return sessionLabel(summary).toLowerCase().indexOf(needle) >= 0
       }
-      // 会话完成提示：会话状态从「进行中」变为「完成」时弹一条提示（点击可打开该会话）
+      // 会话状态：原生 useSessionStatus 的快照是 ReadonlyMap<SessionId, { running, pendingInteraction, completionUnread }>
       const useSessionStatus = props.useSessionStatus
       let statusMap = null
       try {
         statusMap = typeof useSessionStatus === 'function' ? useSessionStatus(function (map) { return map }) : null
       } catch (err) { statusMap = null }
-      const statusSeen = React.useRef({})
+      function statusOf(id) {
+        if (!statusMap) return null
+        const keys = [id, String(id)]
+        for (const key of keys) {
+          try {
+            if (typeof statusMap.get === 'function') {
+              const hit = statusMap.get(key)
+              if (hit) return hit
+            } else if (statusMap[key]) {
+              return statusMap[key]
+            }
+          } catch (err) { /* 忽略非法 key */ }
+        }
+        return null
+      }
+      function statusDotState(id, summary) {
+        const st = statusOf(id)
+        if (st && st.pendingInteraction) return 'warning'
+        const running = st ? st.running === true : Boolean(summary && (summary.running === true || summary.status === 'running'))
+        if (running) return 'ongoing'
+        if (st && st.completionUnread) return 'done'
+        return ''
+      }
+      function statusTrailing(id) {
+        const st = statusOf(id)
+        if (!st || !st.pendingInteraction) return ''
+        if (st.pendingInteraction === 'approval') return '待批准'
+        if (st.pendingInteraction === 'plan-review') return '待确认'
+        if (st.pendingInteraction === 'question') return '待回答'
+        return '待处理'
+      }
+      function statusDot(state) {
+        const Cmp = PI.StateDot
+        if (Cmp && (typeof Cmp === 'function' || typeof Cmp === 'object')) {
+          return h(Cmp, { state: state || 'idle' })
+        }
+        return h('span', { className: 'sbw-dot' + (state ? ' ' + state : '') })
+      }
+      // 会话完成提示：原生 completionUnread 变为 true（跑完且不在主视图）时提示；出现待处理交互时也提示
+      const statusSeen = React.useRef(null)
       useEffect(function () {
         if (!statusMap) return
         const prev = statusSeen.current
         const next = {}
-        Object.keys(statusMap).forEach(function (id) {
-          const entry = statusMap[id]
-          const state = entry && entry.state
-          if (!state) return
-          next[id] = state
+        let ids = []
+        try {
+          if (typeof statusMap.keys === 'function') ids = Array.from(statusMap.keys())
+          else if (typeof statusMap.forEach === 'function') statusMap.forEach(function (value, key) { ids.push(key) })
+          else ids = Object.keys(statusMap)
+        } catch (err) { ids = [] }
+        ids.forEach(function (rawId) {
+          const id = String(rawId)
+          const entry = statusOf(rawId) || {}
+          const snapshot = {
+            running: entry.running === true,
+            pending: entry.pendingInteraction ? String(entry.pendingInteraction) : '',
+            unread: entry.completionUnread === true,
+          }
+          next[id] = snapshot
+          if (!prev) return
           const before = prev[id]
-          if (!before || before === state) return
+          if (!before) return
           const summary = summaries[id]
-          const title = summary ? sessionLabel(summary) : '会话 ' + String(id).slice(0, 8)
-          if (state === 'done') {
-            notifyCompletion({ key: id + ':' + Date.now(), sessionId: id, title: title, kind: 'done' })
-          } else if (state === 'warning') {
-            notifyCompletion({ key: id + ':' + Date.now(), sessionId: id, title: title, kind: 'warning' })
+          const title = summary ? sessionLabel(summary) : '会话 ' + id.slice(0, 8)
+          if (snapshot.unread && !before.unread) {
+            notifyCompletion({ key: id + ':done:' + Date.now(), sessionId: id, title: title, kind: 'done' })
+          }
+          if (snapshot.pending && snapshot.pending !== before.pending) {
+            notifyCompletion({ key: id + ':warn:' + Date.now(), sessionId: id, title: title, kind: 'warning' })
           }
         })
         statusSeen.current = next
@@ -699,6 +758,38 @@ window.__ModuleLoader__.load({
           options.actions
         )
       }
+      // 会话重命名走原生 SessionFace.rename：先 retain 一个引用，再调用 binding.session.rename
+      async function renameSessionTitle(sessionId, title) {
+        const svc = props.sessions
+        if (!svc || typeof svc.using !== 'function') throw new Error('当前版本不支持重命名会话')
+        const result = await svc.using(sessionId, { source: 'workspaceOperation' }, function (reference) {
+          return reference.binding.session.rename(title)
+        })
+        if (!result || result.ok !== true) {
+          const message = result && result.error && result.error.message ? result.error.message : '重命名失败'
+          throw new Error(message)
+        }
+        return result.value
+      }
+      async function commitSessionRename(id, summary) {
+        const title = String(sessionRenameValue || '').trim()
+        if (!title || title === sessionLabel(summary)) {
+          setRenamingSession('')
+          return
+        }
+        setSessionRenameBusy(true)
+        try {
+          await renameSessionTitle(id, title)
+          setRenamingSession('')
+          setSessionRenameValue('')
+          loadTree()
+          notifyChanged()
+        } catch (err) {
+          setError(String((err && err.message) || err))
+        } finally {
+          setSessionRenameBusy(false)
+        }
+      }
       function sessionRows(ws, key, depth) {
         if (!isChildOpen(key)) return null
         const ids = sessionIdsOf(ws)
@@ -712,36 +803,89 @@ window.__ModuleLoader__.load({
         const shown = expanded || needle ? visible : visible.slice(0, SESSION_PREVIEW)
         const rows = shown.map(function (id) {
           const summary = summaries[id]
-          const running = summary && (summary.status === 'running' || summary.status === 'busy' || summary.running === true)
           const active = String(id) === activeSessionId
+          const renaming = renamingSession === String(id)
           return h('div', {
             key: key + ':' + String(id),
             className: 'sbw-row sbw-sess' + (active ? ' selected' : ''),
             role: 'treeitem',
             title: sessionLabel(summary),
             style: indent,
-            onClick: function () { openSession(id) },
+            onClick: function () {
+              if (renaming) return
+              openSession(id)
+            },
             ref: function (node) {
               if (node) sessionNodes.current[String(id)] = node
             },
           },
-            h('span', { className: 'sbw-slot' }, h('span', { className: 'sbw-dot' + (running ? ' busy' : '') })),
-            h('span', { className: 'sbw-title' }, sessionLabel(summary)),
+            h('span', { className: 'sbw-slot' }, statusDot(statusDotState(id, summary))),
+            renaming
+              ? h('input', {
+                  className: 'sbw-input sbw-input-sess',
+                  value: sessionRenameValue,
+                  autoFocus: true,
+                  disabled: sessionRenameBusy,
+                  onClick: function (e) { e.stopPropagation() },
+                  onChange: function (e) { setSessionRenameValue(e.target.value) },
+                  onKeyDown: function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); commitSessionRename(id, summary) }
+                    else if (e.key === 'Escape') { e.preventDefault(); setRenamingSession('') }
+                  },
+                })
+              : h('span', { className: 'sbw-title' }, sessionLabel(summary)),
             (function () {
+              const trail = statusTrailing(id)
+              if (trail) return h('span', { className: 'sbw-trail' }, trail)
               const stamp = sessionStamp(summary)
               if (!stamp) return null
               const text = formatRelative(stamp)
               return text ? h('span', { className: 'sbw-time' }, text) : null
             })(),
             h('span', { className: 'sbw-actions' },
-              h('button', {
-                className: 'sbw-mini',
-                title: '导出这个会话',
-                onClick: function (e) {
-                  e.stopPropagation()
-                  exportSessions([ws], sessionLabel(summary))
-                },
-              }, glyph('IconDownloadOutlineRegular', 14, '⇩'))
+              renaming
+                ? [
+                    h('button', {
+                      key: 'ok',
+                      className: 'sbw-mini',
+                      title: '保存名称',
+                      disabled: sessionRenameBusy,
+                      onClick: function (e) {
+                        e.stopPropagation()
+                        commitSessionRename(id, summary)
+                      },
+                    }, glyph('IconCheckOutlineRegular', 14, '✓')),
+                    h('button', {
+                      key: 'cancel',
+                      className: 'sbw-mini',
+                      title: '取消',
+                      onClick: function (e) {
+                        e.stopPropagation()
+                        setRenamingSession('')
+                      },
+                    }, glyph('IconCloseOutlineRegular', 14, '✕')),
+                  ]
+                : [
+                    h('button', {
+                      key: 'rename',
+                      className: 'sbw-mini',
+                      title: '重命名会话',
+                      onClick: function (e) {
+                        e.stopPropagation()
+                        setRenamingSession(String(id))
+                        setSessionRenameValue(sessionLabel(summary))
+                      },
+                    }, glyph('IconEditOutlineRegular', 14, '✎')),
+                    h('button', {
+                      key: 'export',
+                      className: 'sbw-mini',
+                      title: '导出这个会话',
+                      onClick: function (e) {
+                        e.stopPropagation()
+                        exportSessions([ws], sessionLabel(summary))
+                      },
+                    }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
+                  ]
             )
           )
         })
@@ -863,7 +1007,7 @@ window.__ModuleLoader__.load({
           if (!item) return null
           if (!item.ws) {
             return h('div', { key: key, className: 'sbw-row', role: 'treeitem', style: indent, title: 'Workspace 尚未注册或已失效，到「设置 → 项目工作区」重新注册' },
-              h('span', { className: 'sbw-slot' }, h('span', { className: 'sbw-dot busy' })),
+              h('span', { className: 'sbw-slot' }, statusDot('warning')),
               h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title dim' }, node.name))
             )
           }
