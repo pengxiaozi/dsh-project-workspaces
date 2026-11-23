@@ -7,11 +7,17 @@
 
 ## 安装
 
-```bash
-# 1. 放进插件目录（或用你自己的路径）
-git clone <this-repo> <plugins-dir>/dsh-project-workspaces
+**方式一：从 npm 安装**（推荐）
 
-# 2. 在 profile 的 package.json 里 link 进来
+```bash
+cd "$DSH_HOME/profiles/<profile>"
+npm install --save dsh-project-workspaces
+```
+
+**方式二：本地开发（link）**
+
+```bash
+git clone https://github.com/pengxiaozi/dsh-project-workspaces.git <plugins-dir>/dsh-project-workspaces
 cd "$DSH_HOME/profiles/<profile>"
 npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-workspaces"
 ```
