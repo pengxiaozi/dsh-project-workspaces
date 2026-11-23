@@ -322,7 +322,16 @@ window.__ModuleLoader__.load({
             const ws = byPath.get(normalizePath(child.path)) || byId.get(String(child.workspaceId || '')) || null
             return { child: child, ws: ws || null }
           })
-          return { id: project.id, root: project.name || baseName(project.root), path: project.path || project.root, alias: project.alias || '', tags: project.tags || [], children: children }
+          const selfWs = byPath.get(normalizePath(project.path || project.root)) || byId.get(String(project.workspaceId || '')) || null
+          return {
+            id: project.id,
+            root: project.name || baseName(project.root),
+            path: project.path || project.root,
+            alias: project.alias || '',
+            tags: project.tags || [],
+            selfWs: selfWs || null,
+            children: children,
+          }
         })
         : null
       const legacy = buildGroups(wsItems)
@@ -330,6 +339,7 @@ window.__ModuleLoader__.load({
       const covered = new Set()
       if (projects) {
         for (const project of projects) {
+          if (project.selfWs) covered.add(String(project.selfWs.workspaceId))
           for (const item of project.children) {
             if (item.ws) covered.add(String(item.ws.workspaceId))
           }
@@ -582,6 +592,29 @@ window.__ModuleLoader__.load({
         })
         if (needle && !children.length && String(project.root + ' ' + project.path).toLowerCase().indexOf(needle) < 0) return null
         const open = needle ? true : rootOpen
+        // 叶子项目：项目根目录自身就是一个 Workspace，没有再细分的子工作区
+        if (!project.children.length && project.selfWs) {
+          const ws = project.selfWs
+          return h('div', { key: project.id },
+            rowShell({
+              className: 'sbw-row sbw-ws sbw-leaf',
+              title: ws.path,
+              open: open,
+              style: { '--sbw-indent': '0px' },
+              onClick: function () { toggleRoot(project.id) },
+              text: h('span', { className: 'sbw-text' },
+                h('span', { className: 'sbw-title' }, displayName(project.root, project.alias)),
+                tagChips(project.tags)
+              ),
+              actions: h('span', { className: 'sbw-actions' },
+                h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
+                h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
+                h('button', { className: 'sbw-mini', title: '新建会话', onClick: function (e) { e.stopPropagation(); newSession(ws) } }, glyph('IconNewChatOutlineRegular', 14, '＋'))
+              ),
+            }),
+            open ? sessionRows(ws, project.id, 1) : null
+          )
+        }
         const isRenaming = renaming === project.id
         return h('div', { key: project.id },
           rowShell({
