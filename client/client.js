@@ -441,6 +441,48 @@ window.__ModuleLoader__.load({
           notifyChanged()
         } catch (err) { setError(errorText(err)) }
       }
+      function downloadText(filename, text) {
+        try {
+          const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' })
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = filename
+          document.body.appendChild(link)
+          link.click()
+          setTimeout(function () {
+            try {
+              URL.revokeObjectURL(url)
+              link.remove()
+            } catch (err) { void err }
+          }, 0)
+        } catch (err) {
+          setError('导出失败：' + (err && err.message ? err.message : String(err)))
+        }
+      }
+      async function exportSessions(wsList, label) {
+        const name = label || '会话'
+        const ids = []
+        for (const ws of wsList || []) {
+          if (!ws) continue
+          for (const id of sessionIdsOf(ws)) {
+            const key = String(id)
+            if (ids.indexOf(key) < 0) ids.push(key)
+          }
+        }
+        if (!ids.length) {
+          setError('「' + name + '」名下还没有会话可以导出')
+          return
+        }
+        setError('')
+        try {
+          const body = await postJson(API.exportSessions, { label: name, sessionIds: ids })
+          if (!body || !body.content) throw new Error('导出内容为空')
+          downloadText(body.filename || (name + '-会话导出.md'), body.content)
+        } catch (err) {
+          setError(errorText(err))
+        }
+      }
       // 行结构照抄原生 ProjectRow / SessionRow：folder → chevron → title → hover actions
       function rowShell(options) {
         return h('div', {
@@ -485,7 +527,17 @@ window.__ModuleLoader__.load({
               if (!stamp) return null
               const text = formatRelative(stamp)
               return text ? h('span', { className: 'sbw-time' }, text) : null
-            })()
+            })(),
+            h('span', { className: 'sbw-actions' },
+              h('button', {
+                className: 'sbw-mini',
+                title: '导出这个会话',
+                onClick: function (e) {
+                  e.stopPropagation()
+                  exportSessions([ws], sessionLabel(summary))
+                },
+              }, glyph('IconDownloadOutlineRegular', 14, '⇩'))
+            )
           )
         })
         if (!needle && visible.length > SESSION_PREVIEW) {
@@ -532,6 +584,12 @@ window.__ModuleLoader__.load({
           title: '新建会话',
           onClick: function (e) { e.stopPropagation(); newSession(ws) },
         }, glyph('IconNewChatOutlineRegular', 14, '＋')))
+        actions.push(h('button', {
+          key: 'export',
+          className: 'sbw-mini',
+          title: '导出该工作区的全部会话',
+          onClick: function (e) { e.stopPropagation(); exportSessions([ws], label || ws.title) },
+        }, glyph('IconDownloadOutlineRegular', 14, '⇩')))
         actions.push(h('button', {
           key: 'del',
           className: 'sbw-mini sbw-danger',
@@ -645,6 +703,7 @@ window.__ModuleLoader__.load({
                 h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
                 h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
                 h('button', { className: 'sbw-mini', title: '新建会话', onClick: function (e) { e.stopPropagation(); newSession(ws) } }, glyph('IconNewChatOutlineRegular', 14, '＋')),
+                h('button', { className: 'sbw-mini', title: '导出该项目的全部会话', onClick: function (e) { e.stopPropagation(); exportSessions([ws], project.name || project.root) } }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
                 h('button', { className: 'sbw-mini sbw-danger', title: '删除工作区', onClick: function (e) { e.stopPropagation(); removeWorkspace(ws, project.root) } }, glyph('IconTrashOutlineRegular', 14, '删'))
               ),
             }),
@@ -684,6 +743,7 @@ window.__ModuleLoader__.load({
                 h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
                 h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
                 h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path, name: project.root }) } }, glyph('IconPlusOutlineRegular', 14, '＋')),
+                h('button', { className: 'sbw-mini', title: '导出该项目的全部会话', onClick: function (e) { e.stopPropagation(); exportSessions(project.children.map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : []), project.name || project.root) } }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
                 h('button', { className: 'sbw-mini sbw-danger', title: '移除项目（不删除工作区）', onClick: function (e) { e.stopPropagation(); removeProjectItem(project) } }, glyph('IconTrashOutlineRegular', 14, '删'))
               ),
           }),
@@ -784,6 +844,7 @@ window.__ModuleLoader__.load({
       projectRemove: '/dsh-project-workspaces/project/remove',
       projectRename: '/dsh-project-workspaces/project/rename',
       projectUpdate: '/dsh-project-workspaces/project/update',
+      exportSessions: '/dsh-project-workspaces/export',
       open: '/dsh-project-workspaces/open',
       autoGroup: '/dsh-project-workspaces/project/auto-group'
     }

@@ -71,13 +71,14 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **别名与标签**：项目/子目录都能设别名（显示成 `public(学位申报系统)` 这种形式）和最多 8 个标签（如技术栈），只影响侧边栏显示，不改磁盘目录名；标签渲染成 10px 小 chip，窄侧边栏自动截断
 - **编辑弹窗**：`shell.overlay` 里的第二个弹窗，字段为「目录（只读 + 打开目录）」「项目名称（仅项目）」「别名」「标签（逗号分隔）」，底部实时预览侧边栏显示效果；保存走 `POST /dsh-project-workspaces/project/update`
 - **快速打开目录**：`▤` 按钮调 `POST /dsh-project-workspaces/open`，宿主用 `explorer.exe`（Windows）/ `open`（macOS）/ `xdg-open`（Linux）拉起资源管理器
+- **会话导出**：会话行 `⇩` 导出单个会话、子工作区行 `⇩` 导出该工作区的全部会话、项目行 `⇩` 导出整个项目（含所有子工作区）的会话；服务端读 `sessionQuery.readSession` 汇成 Markdown（用户/助手消息、工具调用与结果，跳过 system/developer），文件名 `标签-会话导出-YYYYMMDD.md`，浏览器直接下载
 - **同父目录自动合并**：子工作区按相对项目根的路径分段聚成树，`public/web`、`public/page` 只出现一个 `public` 节点（右侧显示子工作区数量）
 - **会话折叠**：单个工作区最多铺 6 行会话，多出来折成「还有 N 个会话」（展开后可「收起会话」），搜索命中时不受折叠限制
 - 不属于任何项目的 Workspace **平铺在项目之后**（上方一条分隔线），不用分组标题；点开照样能看会话、新建会话
 - 未注册/已失效的子目录仍会列出（暗色 + 黄点），不隐藏
 - 侧边栏折叠为 rail（`wide === false`）时只渲染两枚图标：展开侧边栏 / 新增工作区
 - state 接口不可用时回退为按 Workspace 标题 `根 / 子` 归组的旧逻辑
-- 图标优先用原生 Fluent 图标（`require('@deepseek-ai/dsh-client-ui-primitives')` 的 `IconFolderOpenRegular` / `IconTriangleRightFillRegular` / `IconNewChatOutlineRegular` / `IconPlusOutlineRegular` / `IconSearchOutlineRegular` / `IconRefreshOutlineRegular` / `IconEditOutlineRegular` / `IconCloseOutlineRegular` / `IconCheckOutlineRegular` / `IconPanelLeftOutlineRegular`），不可用时回退内联 SVG 或文字，不会白屏
+- 图标优先用原生 Fluent 图标（`require('@deepseek-ai/dsh-client-ui-primitives')` 的 `IconFolderOpenRegular` / `IconTriangleRightFillRegular` / `IconNewChatOutlineRegular` / `IconPlusOutlineRegular` / `IconSearchOutlineRegular` / `IconRefreshOutlineRegular` / `IconEditOutlineRegular` / `IconCloseOutlineRegular` / `IconCheckOutlineRegular` / `IconPanelLeftOutlineRegular` / `IconDownloadOutlineRegular` / `IconTrashOutlineRegular`），不可用时回退内联 SVG 或文字，不会白屏
 - 全部颜色走 `--dsw-*` 主题令牌（`label-*` / `interactive-bg-hover` / `state-*` / `border-l*`），light/dark 自动跟随
 
 ## HTTP 路由（宿主插件）
@@ -92,6 +93,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 | `/dsh-project-workspaces/project/rename` | POST | `{projectId, name}` 重命名项目（`projectId` 也接受项目根目录路径） |
 | `/dsh-project-workspaces/project/update` | POST | `{projectId, name?, alias?, tags?, children?: [{path, alias?, tags?}]}` 更新项目名/别名/标签与子目录别名/标签（字段省略则不改；`tags` 支持数组或逗号字符串，最多 8 个） |
 | `/dsh-project-workspaces/project/auto-group` | POST | `{minChildren=2}` 按父目录把现有 Workspace 自动归组为项目 |
+| `/dsh-project-workspaces/export` | POST | `{label, sessionIds[]}` 把若干会话渲染成 Markdown 返回 `{ok, filename, count, sessions[], content}`（会话由宿主 `sessionQuery` 读取） |
 | `/dsh-project-workspaces/open` | POST | `{path}` 结束后台进程打开该目录（`explorer.exe` / `open` / `xdg-open`） |
 | `/dsh-project-workspaces/project/remove` | POST | `{projectId}` 只把项目移出树，Workspace 会话历史保留 |
 | `/dsh-project-workspaces/remove` | POST | `{workspaceId}` 删除 Workspace 注册（不删磁盘目录和会话记录） |
@@ -115,7 +117,7 @@ DSH 原生 Workspace 不能嵌套：会话 cwd 必须等于 Workspace 路径，�
 
 ```
 client/client.js      客户端半边：侧边栏（替换原生工作区区域）、新增工作区弹窗、编辑弹窗、设置面板
-lib/index.js          宿主半边：project-workspaces.json 持久化 + 7 条 HTTP 路由
+lib/index.js          宿主半边：project-workspaces.json 持久化 + 12 条 HTTP 路由（含导出）
 cordis.patch.yml      Loader patch（insert project-workspaces）
 ```
 
