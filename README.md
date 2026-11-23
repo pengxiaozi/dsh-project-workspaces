@@ -71,6 +71,8 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **别名与标签**：项目/子目录都能设别名（显示成 `public(学位申报系统)` 这种形式）和最多 8 个标签（如技术栈），只影响侧边栏显示，不改磁盘目录名；标签渲染成 10px 小 chip，窄侧边栏自动截断
 - **编辑弹窗**：`shell.overlay` 里的第二个弹窗，字段为「目录（只读 + 打开目录）」「项目名称（仅项目）」「别名」「标签（逗号分隔）」，底部实时预览侧边栏显示效果；保存走 `POST /dsh-project-workspaces/project/update`
 - **快速打开目录**：`▤` 按钮调 `POST /dsh-project-workspaces/open`，宿主用 `explorer.exe`（Windows）/ `open`（macOS）/ `xdg-open`（Linux）拉起资源管理器
+- **置顶**：项目行第一个按钮 `📌`（`IconPinOutlineRegular`）切换置顶；置顶的项目单独收在列表最上方的「置顶」分组里，普通项目在后面，顺序由 `/project/pin` 持久化
+- **拖拽排序**：项目行可拖拽，拖到另一项目行的上半区插到它前面、下半区插到它后面（拖拽时显示 2px 主色指示线，源行半透明）；跨分组拖拽会先继承目标项目的置顶状态再重排，顺序由 `/project/reorder` 持久化（只提交显示顺序，未列出的项目原样保留）
 - **会话导出**：会话行 `⇩` 导出单个会话、子工作区行 `⇩` 导出该工作区的全部会话、项目行 `⇩` 导出整个项目（含所有子工作区）的会话；服务端读 `sessionQuery.readSession` 汇成 Markdown（用户/助手消息、工具调用与结果，跳过 system/developer），文件名 `标签-会话导出-YYYYMMDD.md`，浏览器直接下载
 - **同父目录自动合并**：子工作区按相对项目根的路径分段聚成树，`public/web`、`public/page` 只出现一个 `public` 节点（右侧显示子工作区数量）
 - **会话折叠**：单个工作区最多铺 6 行会话，多出来折成「还有 N 个会话」（展开后可「收起会话」），搜索命中时不受折叠限制
@@ -92,6 +94,8 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 | `/dsh-project-workspaces/project` | POST | `{root, name, children[]}` 注册子目录 + 写入/更新项目层级（同一根目录覆盖为最新一次勾选） |
 | `/dsh-project-workspaces/project/rename` | POST | `{projectId, name}` 重命名项目（`projectId` 也接受项目根目录路径） |
 | `/dsh-project-workspaces/project/update` | POST | `{projectId, name?, alias?, tags?, children?: [{path, alias?, tags?}]}` 更新项目名/别名/标签与子目录别名/标签（字段省略则不改；`tags` 支持数组或逗号字符串，最多 8 个） |
+| `/dsh-project-workspaces/project/pin` | POST | `{projectId, pinned?}` 置顶/取消置顶（`pinned` 省略时取反），返回 `{ok, project, state}` |
+| `/dsh-project-workspaces/project/reorder` | POST | `{projectIds[]}` 按给定顺序重排项目，未列出的项目追加在后面，返回 `{ok, state}` |
 | `/dsh-project-workspaces/project/auto-group` | POST | `{minChildren=2}` 按父目录把现有 Workspace 自动归组为项目 |
 | `/dsh-project-workspaces/export` | POST | `{label, sessionIds[]}` 把若干会话渲染成 Markdown 返回 `{ok, filename, count, sessions[], content}`（会话由宿主 `sessionQuery` 读取） |
 | `/dsh-project-workspaces/open` | POST | `{path}` 结束后台进程打开该目录（`explorer.exe` / `open` / `xdg-open`） |
@@ -111,21 +115,17 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 
 DSH 原生 Workspace 不能嵌套：会话 cwd 必须等于 Workspace 路径，所以「项目 → 子工作区」是插件层的树，底层仍是多个独立 Workspace，每个会话的写入沙箱边界是各自子目录。
 
-替换原生工作区区域后，那块 UI 的原生能力不继承：置顶、归档、拖拽、原生工作区对话框、`sidebar.workspaces.directoryFlow` 子槽位都不会出现。会话删除/归档请用会话标题栏菜单，Workspace 管理走「设置 → 项目工作区」。
+替换原生工作区区域后，白板上补齐了置顶与拖拽排序（项目层）；原生其余能力不继承：归档、原生工作区对话框、`sidebar.workspaces.directoryFlow` 子槽位都不会出现。会话删除/归档请用会话标题栏菜单，Workspace 管理走「设置 → 项目工作区」。
+
+宿主侧路由只在 DSH 启动时注册：改了 `lib/index.js` 必须完全退出 DSH 再打开；客户端侧（`client/client.js`）改完 F5 即可。
 
 ## 目录结构
 
 ```
 client/client.js      客户端半边：侧边栏（替换原生工作区区域）、新增工作区弹窗、编辑弹窗、设置面板
-lib/index.js          宿主半边：project-workspaces.json 持久化 + 12 条 HTTP 路由（含导出）
+lib/index.js          宿主半边：project-workspaces.json 持久化 + 14 条 HTTP 路由（含导出 / 置顶 / 拖拽排序）
 cordis.patch.yml      Loader patch（insert project-workspaces）
 ```
-
-## 已知限制
-
-- 原生 Workspace 不能嵌套：DSH 里会话的 cwd 必须等于 Workspace 路径，所以「项目 → 子工作区」的层级只存在于插件层，磁盘与原生 Workspace 仍是扁平的
-- 替换了原生工作区区域，因此原生的置顶、归档、拖拽排序、原生「＋」对话框与 `sidebar.workspaces.directoryFlow` 子槽位不会出现；这些能力需要的话可以再补
-- 宿主侧路由只在 DSH 启动时注册；改了 `lib/index.js` 必须完全退出 DSH 再打开（客户端侧改完 F5 即可）
 
 ## License
 

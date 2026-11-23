@@ -68,6 +68,11 @@ window.__ModuleLoader__.load({
       '.sbw-time{flex:none;margin-left:auto;font-size:10px;line-height:16px;color:var(--dsw-alias-label-tertiary);margin-inline-end:-1px}',
       '.sbw-empty-page{padding:16px 12px;font-size:13px;line-height:20px}',
       '.sbw-empty{padding:8px 12px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) + var(--sbw-indent,0px));color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
+      '.sbw-sect-head{height:22px;display:flex;align-items:center;padding-left:calc(var(--dsh-sidebar-row-padding,12px) - 3px);font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);letter-spacing:0.02em}',
+      '.sbw-pin.pinned{color:var(--dsw-alias-brand-primary,#4d6bfe);opacity:1}',
+      '.sbw-dragging{opacity:0.45}',
+      '.sbw-drop-before{box-shadow:inset 0 2px 0 var(--dsw-alias-brand-primary,#4d6bfe)}',
+      '.sbw-drop-after{box-shadow:inset 0 -2px 0 var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-more .sbw-title{font-size:12px;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-more:hover .sbw-title{color:var(--dsw-alias-label-primary)}',
       '.sbw-more .sbw-chev-inline{display:inline-flex;margin-left:auto;color:var(--dsw-alias-label-tertiary)}',
@@ -245,6 +250,8 @@ window.__ModuleLoader__.load({
       const [renaming, setRenaming] = useState('')
       const [renameValue, setRenameValue] = useState('')
       const [busy, setBusy] = useState(false)
+      const [dragId, setDragId] = useState('')
+      const [dropHint, setDropHint] = useState(null)
       async function commitRename(project) {
         const name = renameValue.trim()
         if (!project) { setRenaming(''); return }
@@ -297,6 +304,96 @@ window.__ModuleLoader__.load({
         window.addEventListener(CHANGED_EVENT, onChange)
         return function () { window.removeEventListener(CHANGED_EVENT, onChange) }
       }, [])
+      async function postJson(url, payload) {
+        const response = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload || {}),
+        })
+        const body = await response.json().catch(function () { return {} })
+        if (!response.ok || body.ok === false) throw new Error(body.error || ('请求失败：' + response.status))
+        return body
+      }
+      async function togglePin(project) {
+        setError('')
+        try {
+          await postJson(API.projectPin, { projectId: project.id, pinned: !project.pinned })
+          await loadTree()
+        } catch (err) {
+          setError(String(err && err.message ? err.message : err))
+        }
+      }
+      // 拖拽结束后：按「置顶组在前、其余在后」的显示顺序重排，并把被拖的项目归到目标所在分组
+      async function moveProject(sourceId, targetId, after) {
+        if (!sourceId || !targetId || sourceId === targetId) return
+        const list = Array.isArray(tree) ? tree : []
+        const source = list.find(function (item) { return item.id === sourceId })
+        const target = list.find(function (item) { return item.id === targetId })
+        if (!source || !target) return
+        const pinnedIds = list.filter(function (item) { return item.pinned === true }).map(function (item) { return item.id })
+        const normalIds = list.filter(function (item) { return item.pinned !== true }).map(function (item) { return item.id })
+        const order = pinnedIds.concat(normalIds).filter(function (id) { return id !== sourceId })
+        const index = order.indexOf(targetId)
+        if (index < 0) order.push(sourceId)
+        else order.splice(after ? index + 1 : index, 0, sourceId)
+        setBusy(true)
+        setError('')
+        try {
+          if (source.pinned !== target.pinned) {
+            await postJson(API.projectPin, { projectId: sourceId, pinned: target.pinned === true })
+          }
+          await postJson(API.projectReorder, { projectIds: order })
+          await loadTree()
+        } catch (err) {
+          setError(String(err && err.message ? err.message : err))
+        } finally {
+          setBusy(false)
+        }
+      }
+      function projectDragProps(project) {
+        return {
+          draggable: renaming !== project.id,
+          onDragStart: function (event) {
+            setDragId(project.id)
+            try {
+              event.dataTransfer.setData('text/plain', project.id)
+              event.dataTransfer.effectAllowed = 'move'
+            } catch (err) { void err }
+          },
+          onDragOver: function (event) {
+            if (!dragId || dragId === project.id) return
+            event.preventDefault()
+            try { event.dataTransfer.dropEffect = 'move' } catch (err) { void err }
+            const rect = event.currentTarget.getBoundingClientRect()
+            const after = (event.clientY - rect.top) > rect.height / 2
+            setDropHint({ id: project.id, after: after })
+          },
+          onDragLeave: function () {
+            setDropHint(function (hint) { return hint && hint.id === project.id ? null : hint })
+          },
+          onDrop: function (event) {
+            event.preventDefault()
+            const hint = dropHint
+            const source = dragId
+            setDragId('')
+            setDropHint(null)
+            if (!source || source === project.id) return
+            void moveProject(source, project.id, hint && hint.id === project.id ? hint.after : false)
+          },
+          onDragEnd: function () {
+            setDragId('')
+            setDropHint(null)
+          },
+        }
+      }
+      function projectRowClass(project, base) {
+        let cls = base
+        if (dragId === project.id) cls += ' sbw-dragging'
+        if (dropHint && dropHint.id === project.id) cls += dropHint.after ? ' sbw-drop-after' : ' sbw-drop-before'
+        return cls
+      }
+
       const wsItems = (wsSnap && wsSnap.items) || []
       const summaries = (function () {
         const map = Object.assign({}, (sessionSnap && sessionSnap.byId) || {})
@@ -330,6 +427,7 @@ window.__ModuleLoader__.load({
             path: project.path || project.root,
             alias: project.alias || '',
             tags: project.tags || [],
+            pinned: project.pinned === true,
             selfWs: selfWs || null,
             children: children,
           }
@@ -485,14 +583,16 @@ window.__ModuleLoader__.load({
       }
       // 行结构照抄原生 ProjectRow / SessionRow：folder → chevron → title → hover actions
       function rowShell(options) {
-        return h('div', {
+        const shellProps = {
           key: options.rowKey,
           className: options.className,
           role: 'treeitem',
           title: options.title || undefined,
           style: options.style,
           onClick: options.onClick,
-        },
+        }
+        if (options.drag) Object.assign(shellProps, options.drag)
+        return h('div', shellProps,
           h('span', { className: 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : '') }, options.icon || FolderIcon({ open: options.open })),
           h('span', { className: 'sbw-slot sbw-chev' }, ChevronIcon({ open: options.open })),
           options.text,
@@ -690,16 +790,18 @@ window.__ModuleLoader__.load({
           const ws = project.selfWs
           return h('div', { key: project.id },
             rowShell({
-              className: 'sbw-row sbw-ws sbw-leaf',
+              className: projectRowClass(project, 'sbw-row sbw-ws sbw-leaf'),
               title: ws.path,
               open: open,
               style: { '--sbw-indent': '0px' },
+              drag: projectDragProps(project),
               onClick: function () { toggleRoot(project.id) },
               text: h('span', { className: 'sbw-text' },
                 h('span', { className: 'sbw-title' }, displayName(project.root, project.alias)),
                 tagChips(project.tags)
               ),
               actions: h('span', { className: 'sbw-actions' },
+                h('button', { className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''), title: project.pinned ? '取消置顶' : '置顶项目', onClick: function (e) { e.stopPropagation(); togglePin(project) } }, glyph('IconPinOutlineRegular', 14, '📌')),
                 h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
                 h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
                 h('button', { className: 'sbw-mini', title: '新建会话', onClick: function (e) { e.stopPropagation(); newSession(ws) } }, glyph('IconNewChatOutlineRegular', 14, '＋')),
@@ -713,9 +815,10 @@ window.__ModuleLoader__.load({
         const isRenaming = renaming === project.id
         return h('div', { key: project.id },
           rowShell({
-            className: 'sbw-row sbw-proj',
+            className: projectRowClass(project, 'sbw-row sbw-proj'),
             title: project.path,
             open: open,
+            drag: projectDragProps(project),
             onClick: function () { if (!isRenaming) toggleRoot(project.id) },
             text: isRenaming
               ? h('input', {
@@ -740,6 +843,7 @@ window.__ModuleLoader__.load({
                 h('button', { className: 'sbw-mini', title: '取消', onClick: function (e) { e.stopPropagation(); setRenaming('') } }, glyph('IconCloseOutlineRegular', 14, '✕'))
               )
               : h('span', { className: 'sbw-actions' },
+                h('button', { className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''), title: project.pinned ? '取消置顶' : '置顶项目', onClick: function (e) { e.stopPropagation(); togglePin(project) } }, glyph('IconPinOutlineRegular', 14, '📌')),
                 h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
                 h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
                 h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path, name: project.root }) } }, glyph('IconPlusOutlineRegular', 14, '＋')),
@@ -764,6 +868,8 @@ window.__ModuleLoader__.load({
         )
       }
       const hasProjects = projects && projects.length
+      const pinnedProjects = projects ? projects.filter(function (project) { return project.pinned === true }) : []
+      const normalProjects = projects ? projects.filter(function (project) { return project.pinned !== true }) : []
       const looseVisible = needle
         ? loose.filter(function (ws) {
           if (String(ws.title || baseName(ws.path) || '').toLowerCase().indexOf(needle) >= 0) return true
@@ -811,7 +917,11 @@ window.__ModuleLoader__.load({
             empty ? h('div', { className: 'sbw-empty sbw-empty-page' },
               '还没有工作区。点右上角 ＋ 选择目录、命名项目并勾选子目录，即可把项目拆成多个独立子工作区。') : null,
             !empty && !hasProjects ? h('div', { className: 'sbw-hint' }, '提示：点 ＋ 新建项目，或到「设置 → 项目工作区」点「按父目录自动归组」。') : null,
-            projects ? projects.map(projectNode) : null,
+            pinnedProjects.length ? h('div', { className: 'sbw-group sbw-sect' },
+              h('div', { className: 'sbw-sect-head' }, '置顶'),
+              pinnedProjects.map(projectNode)
+            ) : null,
+            normalProjects.length ? h('div', { className: 'sbw-group' }, normalProjects.map(projectNode)) : null,
             looseVisible.length ? h('div', { className: 'sbw-loose' }, looseVisible.map(function (ws) {
               return workspaceNode(ws, ws.title || baseName(ws.path), 'loose:' + String(ws.workspaceId), 0)
             })) : null,
@@ -844,6 +954,8 @@ window.__ModuleLoader__.load({
       projectRemove: '/dsh-project-workspaces/project/remove',
       projectRename: '/dsh-project-workspaces/project/rename',
       projectUpdate: '/dsh-project-workspaces/project/update',
+      projectPin: '/dsh-project-workspaces/project/pin',
+      projectReorder: '/dsh-project-workspaces/project/reorder',
       exportSessions: '/dsh-project-workspaces/export',
       open: '/dsh-project-workspaces/open',
       autoGroup: '/dsh-project-workspaces/project/auto-group'
