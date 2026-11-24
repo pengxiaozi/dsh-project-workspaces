@@ -2234,6 +2234,12 @@ window.__ModuleLoader__.load({
       '.pwt-hit{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;height:100%;padding:0 8px 0 11px;border:none;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:13px;line-height:18px}',
       '.pwt-tab.on .pwt-hit{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
       '.pwt-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pwt-dot{flex:none;width:7px;height:7px;margin-right:6px;border-radius:50%;box-sizing:border-box}',
+      '.pwt-dot.ongoing{background:transparent;border:1.5px solid var(--dsw-alias-state-business-primary,#4d6bfe);border-top-color:transparent;animation:sbw-spin .8s linear infinite}',
+      '.pwt-dot.warning{background:var(--dsw-alias-state-warn-primary,#d99b1f)}',
+      '.pwt-dot.done{background:var(--dsw-alias-state-success-primary,#2ea043)}',
+      '.pwt-tab.st-warning{border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary,#d99b1f) 30%,transparent)}',
+      '.pwt-tab.st-done .pwt-hit{color:var(--dsw-alias-label-primary)}',
       '.pwt-x{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:5px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:0;transition:opacity 120ms ease,background-color 120ms ease,color 120ms ease}',
       '.pwt-tab:hover .pwt-x,.pwt-tab.on .pwt-x{opacity:1}',
       '.pwt-x:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.08));color:var(--dsw-alias-label-primary)}',
@@ -3134,6 +3140,26 @@ window.__ModuleLoader__.load({
           const items = (snap && snap.items) || []
           for (let i = 0; i < items.length; i += 1) { const item = items[i]; if (item && item.id) summaries[String(item.id)] = item }
         }
+        const statusMap = (props && typeof props.useSessionStatus === 'function')
+          ? props.useSessionStatus(function (map) { return map })
+          : null
+        function tabStatus(id) {
+          const key = String(id)
+          let status = null
+          try {
+            if (statusMap && typeof statusMap.get === 'function') status = statusMap.get(key) || statusMap.get(id)
+            else if (statusMap) status = statusMap[key] || statusMap[id]
+          } catch (err) { status = null }
+          if (!status) {
+            const item = summaries[key]
+            if (item && item.running) status = { running: true }
+          }
+          if (!status) return ''
+          if (status.pendingInteraction) return 'warning'
+          if (status.running) return 'ongoing'
+          if (status.completionUnread) return 'done'
+          return ''
+        }
         const activeId = String((snap && (snap.activeSessionId || snap.currentSessionId || snap.selectedSessionId
           || snap.activeId || snap.selectedId
           || (snap.active && snap.active.id) || (snap.current && snap.current.id))) || '') || lastOpenedId
@@ -3269,7 +3295,9 @@ window.__ModuleLoader__.load({
                 },
               },
                 list.map(function (id) {
-                  return h('div', { key: 'tab:' + id, ref: function (node) { if (node) tabRefs.current[id] = node }, className: 'pwt-tab' + (highlightId && id === highlightId ? ' on' : ''), role: 'tab', title: sessionLabel(summaries[id]) },
+                  const st = tabStatus(id)
+                  const stText = st === 'warning' ? '等待你处理' : (st === 'ongoing' ? '正在回答' : (st === 'done' ? '已完成未查看' : '空闲'))
+                  return h('div', { key: 'tab:' + id, ref: function (node) { if (node) tabRefs.current[id] = node }, className: 'pwt-tab' + (highlightId && id === highlightId ? ' on' : '') + (st ? ' st-' + st : ''), role: 'tab', title: sessionLabel(summaries[id]) + ' · ' + stText },
                     h('button', {
                       className: 'pwt-hit',
                       onClick: function (e) {
@@ -3277,7 +3305,13 @@ window.__ModuleLoader__.load({
                         noteOpened(id)
                         if (services.uiWorkspace && typeof services.uiWorkspace.openSession === 'function') services.uiWorkspace.openSession(id)
                       },
-                    }, h('span', { className: 'pwt-t' }, sessionLabel(summaries[id]))),
+                    },
+                      st
+                        ? (PI.StateDot
+                          ? h(PI.StateDot, { state: st === 'ongoing' ? 'ongoing' : st, size: 6 })
+                          : h('span', { className: 'pwt-dot ' + st }))
+                        : null,
+                      h('span', { className: 'pwt-t' }, sessionLabel(summaries[id]))),
                     h('button', {
                       className: 'pwt-x',
                       title: '从标签栏移除（不会删除会话）',
@@ -3317,7 +3351,7 @@ window.__ModuleLoader__.load({
         return ctx.slots.register({
           name: 'conversation.header.leading',
           inject: function () { return { services: services } },
-        }, function (props) { return h(SessionTabs, { services: (props && props.services) || services }) })
+        }, function (props) { return h(SessionTabs, Object.assign({}, props, { services: (props && props.services) || services })) })
       })
       ctx.slots.inject('shell.overlay', function () {
         return ctx.slots.register({ name: 'shell.overlay', id: NS + '-create', order: 80 }, function () {
