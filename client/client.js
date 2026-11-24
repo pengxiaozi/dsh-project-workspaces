@@ -353,6 +353,13 @@ window.__ModuleLoader__.load({
       })
     }
 
+    // 调试/测试入口：允许外部打开会话列表弹窗（不改变正常交互路径）
+    try {
+      if (typeof window !== 'undefined') {
+        window.__dshProjectWorkspaces = Object.assign(window.__dshProjectWorkspaces || {}, { openSessionList: openSessionList })
+      }
+    } catch (err) { void err }
+
     function useSessionListSeed() {
       const [seed, setSeed] = useState(null)
       useEffect(function () {
@@ -1163,6 +1170,24 @@ window.__ModuleLoader__.load({
         return out
       }
 
+      // 与 nodeWsIds 配套：把目录树下所有工作区的会话 id 也收集起来，
+      // 这样会话列表弹窗不依赖 session.workspaceId 是否齐全
+      function nodeSessionIds(node) {
+        const out = []
+        const walk = function (current) {
+          if (!current) return
+          if (current.item && current.item.ws) {
+            sessionIdsOf(current.item.ws).forEach(function (id) {
+              const key = String(id)
+              if (out.indexOf(key) < 0) out.push(key)
+            })
+          }
+          if (current.children) current.children.forEach(walk)
+        }
+        walk(node)
+        return out
+      }
+
       function nodeWsIds(node) {
         const out = []
         const walk = function (current) {
@@ -1223,7 +1248,7 @@ window.__ModuleLoader__.load({
             title: withActivity(ws.path, wsActivity(ws)),
             open: open,
             activity: wsActivity(ws),
-            onFolderClick: function () { openSessionList({ title: (label || ws.title || ws.path), wsIds: wsIdsOf([ws]) }) },
+            onFolderClick: function () { openSessionList({ title: (label || ws.title || ws.path), wsIds: wsIdsOf([ws]), sessionIds: sessionIdsOf(ws) }) },
             style: { '--sbw-indent': (depth * 12) + 'px' },
             onClick: function () { toggleChild(key) },
             text: h('span', { className: 'sbw-text' },
@@ -1304,7 +1329,7 @@ window.__ModuleLoader__.load({
           title: withActivity(node.path + ' · ' + countLeaves(node) + ' 个子工作区', nodeActivity(node)),
           open: open,
           activity: nodeActivity(node),
-          onFolderClick: function () { openSessionList({ title: node.name, wsIds: nodeWsIds(node) }) },
+          onFolderClick: function () { openSessionList({ title: node.name, wsIds: nodeWsIds(node), sessionIds: nodeSessionIds(node) }) },
           style: indent,
           onClick: function () { toggleChild(key) },
           text: h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title' }, node.name)),
@@ -1596,7 +1621,7 @@ window.__ModuleLoader__.load({
             rows.push(h('div', { key: key + ':s:' + summary.id, style: { paddingLeft: (6 + (level + 1) * 12) + 'px' } }, cardSessionRow(summary, key + ':s:' + summary.id, false)))
           }
           if (list.length > shown.length) {
-            rows.push(h('div', { key: key + ':more', className: 'sbw-card-more', style: { paddingLeft: (6 + (level + 1) * 12) + 'px' }, onClick: function (e) { e.stopPropagation(); openSessionList({ title: label, wsIds: wsIdsOf([node.item.ws]) }) } }, '还有 ' + (list.length - shown.length) + ' 个会话'))
+            rows.push(h('div', { key: key + ':more', className: 'sbw-card-more', style: { paddingLeft: (6 + (level + 1) * 12) + 'px' }, onClick: function (e) { e.stopPropagation(); openSessionList({ title: label, wsIds: wsIdsOf([node.item.ws]), sessionIds: list.map(function (item) { return item.id }) }) } }, '还有 ' + (list.length - shown.length) + ' 个会话'))
           }
           if (!shown.length) {
             rows.push(h('div', { key: key + ':empty', className: 'sbw-card-empty', style: { paddingLeft: (6 + (level + 1) * 12) + 'px' } }, '暂无会话'))
@@ -1734,6 +1759,7 @@ window.__ModuleLoader__.load({
                     openSessionList({
                       title: displayName(project.name || project.root, project.alias),
                       wsIds: wsIdsOf((project.children || []).map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : [])),
+                      sessionIds: projectSessions(project).map(function (item) { return item.id }),
                     })
                   },
                 }, '还有 ' + rest + ' 个会话', glyph('IconTriangleRightFillRegular', 10, '▾'))
@@ -2858,10 +2884,12 @@ window.__ModuleLoader__.load({
       const [archiveError, setArchiveError] = useState('')
       useEffect(function () { setQuery(''); setArchiveError('') }, [seed])
       if (!seed) return null
-      const wanted = seed.wsIds || []
+      const wantedWs = (seed.wsIds || []).map(String)
+      const wantedIds = (seed.sessionIds || []).map(String)
       const all = (snapshot.items || []).filter(function (item) {
-        if (!wanted.length) return true
-        return wanted.map(String).indexOf(String(item.workspaceId)) >= 0
+        if (!wantedWs.length && !wantedIds.length) return true
+        if (wantedIds.length && wantedIds.indexOf(String(item.id)) >= 0) return true
+        return wantedWs.length > 0 && wantedWs.indexOf(String(item.workspaceId)) >= 0
       })
       const needle = query.trim().toLowerCase()
       const list = needle

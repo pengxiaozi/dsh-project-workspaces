@@ -60,14 +60,15 @@ async function flush() {
   }
 }
 
-function mountSidebar(env) {
+function mountSidebar(env, options) {
+  const opts = options || {}
   let renderer
   TR.act(() => {
     renderer = TR.create(React.createElement(env.sidebar.component, {
       wide: true,
       expandSidebar() {},
-      sessions: { list: listOf([]) },
-      workspaces: { list: listOf([]) },
+      sessions: { list: listOf(opts.sessions || []) },
+      workspaces: { list: listOf(opts.workspaces || []) },
       uiWorkspace: { openSession() {}, async startSession() {}, async archiveSession() {} },
     }))
   })
@@ -186,6 +187,32 @@ test('会话标签条：打开会话后出现标签，点 × 移除', async () =
   TR.act(() => { close.props.onClick({ stopPropagation() {}, preventDefault() {}, currentTarget: {} }) })
   await flush()
   assert.equal(findByClass(renderer, 'pwt-tab').length, 0, '关闭后标签应消失')
+})
+
+test('会话列表弹窗：session 快照缺 workspaceId 时仍能列出该工作区的会话（防回归：弹窗 0 个会话）', async () => {
+  const sessions = [{ id: 's1', sessionId: 's1', title: '会话一' }]
+  const workspaces = [{ id: 'w-web', workspaceId: 'w-web', path: PROJECT_STATE.projects[0].children[0].path, title: 'web', sessionIds: ['s1'] }]
+  const env = makeEnv({ sessions, workspaces })
+  global.fetch = stubFetch(PROJECT_STATE)
+  let overlay
+  TR.act(() => {
+    overlay = TR.create(React.createElement(env.overlay.component, {
+      services: {
+        sessions: { list: listOf(sessions) },
+        workspaces: { list: listOf(workspaces) },
+        uiWorkspace: { openSession() {}, async archiveSession() {} },
+      },
+    }))
+  })
+  await flush()
+  const api = env.sandbox.window.__dshProjectWorkspaces
+  assert.ok(api && typeof api.openSessionList === 'function', '应暴露 openSessionList 调试入口')
+  TR.act(() => { api.openSessionList({ title: 'web', wsIds: ['w-web'], sessionIds: ['s1'] }) })
+  await flush()
+  const rows = findByClass(overlay, 'pw-sess-row')
+  assert.equal(rows.length, 1, '弹窗应列出该工作区的 1 条会话，实际 ' + rows.length)
+  const subtitle = JSON.stringify(overlay.toJSON())
+  assert.ok(!subtitle.includes('0 个会话'), '不应显示 0 个会话：' + subtitle.slice(0, 200))
 })
 
 test('挂载时没有可用布局祖先也不会抛错（防回归：量高逻辑崩溃）', async () => {
