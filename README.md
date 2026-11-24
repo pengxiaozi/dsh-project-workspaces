@@ -5,6 +5,8 @@
 - 宿主半边（`lib/index.js`）：`DSH_HOME/project-workspaces.json` 里的层级 + `/dsh-project-workspaces/*` HTTP 路由
 - 客户端半边（`client/client.js`）：`sidebar.workspaces`（priority -100）、`settings.section`（设置 → 项目工作区）、`shell.overlay`（新增工作区 / 编辑弹窗）
 
+- **会话标签条**：对话区标题左侧（`conversation.header.leading` 槽位）有一排最近打开的会话标签，点一下就切过去；hover 出现 `×` 只从标签栏移除（不会归档/删除会话）；末尾 `≡` 或 `Ctrl+K` 打开会话搜索面板。标签最多 8 个、按最近使用排序、持久化在 `localStorage` 的 `dsh-project-workspaces:tabs`
+
 ## 安装
 
 **方式一：从 npm 安装**（推荐）

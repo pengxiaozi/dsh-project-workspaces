@@ -2105,7 +2105,24 @@ window.__ModuleLoader__.load({
       '.sbw-sect-head{margin-top:2px}',
       '.sbw-branch > * + *{margin-top:1px}',
     ].join('')
-    const CSS = SIDEBAR_CSS + DIALOG_CSS + REFINE_CSS
+
+    const TABS_CSS = [
+      '.pwt{display:flex;align-items:center;gap:4px;min-width:0;max-width:min(520px,48vw);overflow-x:auto;scrollbar-width:none;margin-right:8px}',
+      '.pwt::-webkit-scrollbar{display:none}',
+      '.pwt-tab{flex:none;display:inline-flex;align-items:center;max-width:190px;height:26px;border-radius:999px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);border:0.5px solid transparent;transition:background-color 120ms ease,border-color 120ms ease}',
+      '.pwt-tab:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06))}',
+      '.pwt-tab.on{background:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 14%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 30%,transparent)}',
+      '.pwt-hit{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;height:100%;padding:0 4px 0 10px;border:none;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit}',
+      '.pwt-tab.on .pwt-hit{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
+      '.pwt-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;line-height:16px}',
+      '.pwt-x{flex:none;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:4px;border:none;border-radius:50%;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:0;transition:opacity 120ms ease,background-color 120ms ease}',
+      '.pwt-tab:hover .pwt-x{opacity:1}',
+      '.pwt-x:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary)}',
+      '.pwt-add{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
+      '.pwt-add:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary)}',
+    ].join('')
+
+    const CSS = SIDEBAR_CSS + DIALOG_CSS + REFINE_CSS + TABS_CSS
 
     async function request(url, init) {
       const response = await fetch(url, Object.assign({ credentials: 'same-origin' }, init || {}))
@@ -2525,8 +2542,13 @@ window.__ModuleLoader__.load({
           }
           if (event.key === 'Escape') setOpen(false)
         }
+        function onOpenPalette() { setOpen(true); setQuery(''); setCursor(0) }
         window.addEventListener('keydown', onKey)
-        return function () { window.removeEventListener('keydown', onKey) }
+        window.addEventListener('dsh-project-workspaces:open-palette', onOpenPalette)
+        return function () {
+          window.removeEventListener('keydown', onKey)
+          window.removeEventListener('dsh-project-workspaces:open-palette', onOpenPalette)
+        }
       }, [])
       useEffect(function () {
         if (!open) return undefined
@@ -2959,6 +2981,72 @@ window.__ModuleLoader__.load({
         }) : null
       )
     }
+      // ── 右侧顶部会话标签条：最近打开的会话排成一行，点一下切过去 ──
+      const TABS_KEY = 'dsh-project-workspaces:tabs'
+      const MAX_TABS = 8
+      function readTabs() {
+        try {
+          const raw = window.localStorage && window.localStorage.getItem(TABS_KEY)
+          const list = raw ? JSON.parse(raw) : null
+          return Array.isArray(list) ? list.map(String).filter(Boolean) : []
+        } catch (err) { return [] }
+      }
+      function writeTabs(list) {
+        try { if (window.localStorage) window.localStorage.setItem(TABS_KEY, JSON.stringify(list)) } catch (err) { void err }
+      }
+      function SessionTabs(props) {
+        const services = (props && props.services) || {}
+        const snap = useSnapshot(services.sessions && services.sessions.list)
+        const summaries = {}
+        if (snap) {
+          if (snap.byId) Object.keys(snap.byId).forEach(function (id) { summaries[String(id)] = snap.byId[id] })
+          const items = (snap && snap.items) || []
+          for (let i = 0; i < items.length; i += 1) { const item = items[i]; if (item && item.id) summaries[String(item.id)] = item }
+        }
+        const activeId = String((snap && (snap.activeSessionId || snap.currentSessionId || snap.selectedSessionId
+          || snap.activeId || snap.selectedId
+          || (snap.active && snap.active.id) || (snap.current && snap.current.id))) || '')
+        const [order, setOrder] = useState(readTabs)
+        useEffect(function () {
+          if (!activeId) return
+          setOrder(function (prev) {
+            if (prev[0] === activeId) return prev
+            const next = [activeId].concat(prev.filter(function (id) { return id !== activeId })).slice(0, MAX_TABS)
+            writeTabs(next)
+            return next
+          })
+        }, [activeId])
+        function drop(id) {
+          setOrder(function (prev) {
+            const next = prev.filter(function (x) { return x !== id })
+            writeTabs(next)
+            return next
+          })
+        }
+        function openAll() {
+          try { window.dispatchEvent(new CustomEvent('dsh-project-workspaces:open-palette')) } catch (err) { void err }
+        }
+        const list = order.filter(function (id) { return summaries[id] })
+        if (!list.length) return null
+        return h('div', { className: 'pwt', role: 'tablist' },
+          list.map(function (id) {
+            return h('div', { key: 'tab:' + id, className: 'pwt-tab' + (id === activeId ? ' on' : ''), role: 'tab', title: sessionLabel(summaries[id]) },
+              h('button', {
+                className: 'pwt-hit',
+                onClick: function (e) {
+                  e.stopPropagation()
+                  if (services.uiWorkspace && typeof services.uiWorkspace.openSession === 'function') services.uiWorkspace.openSession(id)
+                },
+              }, h('span', { className: 'pwt-t' }, sessionLabel(summaries[id]))),
+              h('button', {
+                className: 'pwt-x',
+                title: '从标签栏移除（不会删除会话）',
+                onClick: function (e) { e.stopPropagation(); drop(id) },
+              }, glyph('IconCloseOutlineRegular', 12, '×')))
+          }),
+          h('button', { className: 'pwt-add', title: '打开会话列表（Ctrl+K）', onClick: function (e) { e.stopPropagation(); openAll() } }, glyph('IconFlatListOutlineRegular', 14, '≡')))
+      }
+
     function apply(ctx) {
       const sessions = ctx.get('sessions')
       const workspaces = ctx.get('workspaces')
@@ -2983,6 +3071,12 @@ window.__ModuleLoader__.load({
           label: function () { return '项目工作区' },
           inject: function () { return { services: services } },
         }, function (props) { return h(Panel, { services: (props && props.services) || services }) })
+      })
+      ctx.slots.inject('conversation.header.leading', function () {
+        return ctx.slots.register({
+          name: 'conversation.header.leading',
+          inject: function () { return { services: services } },
+        }, function (props) { return h(SessionTabs, { services: (props && props.services) || services }) })
       })
       ctx.slots.inject('shell.overlay', function () {
         return ctx.slots.register({ name: 'shell.overlay', id: NS + '-create', order: 80 }, function () {
