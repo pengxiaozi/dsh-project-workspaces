@@ -110,11 +110,14 @@ window.__ModuleLoader__.load({
       '.sbw-now-label{flex:none;font-size:12px;line-height:17px;color:var(--dsw-alias-brand-primary,#4d6bfe)}' +
       '.sbw-now-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:19px;color:var(--dsw-alias-label-primary);font-weight:500}' +
       '.sbw-cur{flex:none;font-size:11px;line-height:17px;padding:0 6px;border-radius:999px;color:var(--dsw-alias-brand-primary,#4d6bfe);background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 16%, transparent)}' +
-      '.sbw-sess.selected{position:relative;background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 15%, transparent)}',
-      '.sbw-sess.selected::before{content:"";position:absolute;top:7px;bottom:7px;left:6px;width:2px;border-radius:1px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
-      '.sbw-sess.selected .sbw-title{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
-      '.sbw-sess.selected:hover{background-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 16%,transparent)}',
-      '.sbw-sess.selected .sbw-time{color:var(--dsw-alias-brand-primary,#4d6bfe);opacity:.8}',
+      '.sbw-sess.selected{position:relative;background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 20%, transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 30%, transparent)}',
+      '.sbw-sess.selected::before{content:"";position:absolute;top:6px;bottom:6px;left:5px;width:3px;border-radius:2px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
+      '.sbw-sess.selected .sbw-title{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:600}',
+      '.sbw-sess.selected:hover{background-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 22%,transparent)}',
+      '.sbw-sess.selected .sbw-time{color:var(--dsw-alias-brand-primary,#4d6bfe);opacity:.85}',
+      // 当前会话的祖先行（工作区 / 合并目录 / 项目）用主色文件夹 + 左侧细线，便于定位
+      '.sbw-row.has-active .sbw-folder{color:var(--dsw-alias-brand-primary,#4d6bfe)}',
+      '.sbw-row.has-active .sbw-title{font-weight:500}',
       '.sbw-dot{flex:none;width:7px;height:7px;border-radius:50%;background:currentColor;color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}',
       '.sbw-dot.ongoing{width:8px;height:8px;background:transparent;border:1.5px solid var(--dsw-alias-state-business-primary,#4d6bfe);border-top-color:transparent;animation:sbw-spin .8s linear infinite}',
       '.sbw-dot.warning{color:var(--dsw-alias-state-warn-primary,#c98a00)}',
@@ -434,6 +437,7 @@ window.__ModuleLoader__.load({
       const [dropHint, setDropHint] = useState(null)
       const [renamingSession, setRenamingSession] = useState('')
       const [sessionRenameValue, setSessionRenameValue] = useState('')
+      const [lastPicked, setLastPicked] = useState('')
       const [sessionRenameBusy, setSessionRenameBusy] = useState(false)
       const scrollRef = React.useRef(null)
       const sessionNodes = React.useRef({})
@@ -587,8 +591,17 @@ window.__ModuleLoader__.load({
           },
         }
       }
+      function projectHasCurrent(project) {
+        if (!currentId || !project) return false
+        if (project.selfWs && hasCurrentSession(project.selfWs)) return true
+        for (const item of (project.children || [])) {
+          if (item.ws && hasCurrentSession(item.ws)) return true
+        }
+        return false
+      }
       function projectRowClass(project, base) {
         let cls = base
+        if (projectHasCurrent(project)) cls += ' has-active'
         if (dragId === project.id) cls += ' sbw-dragging'
         if (dropHint && dropHint.id === project.id) cls += dropHint.after ? ' sbw-drop-after' : ' sbw-drop-before'
         return cls
@@ -608,6 +621,8 @@ window.__ModuleLoader__.load({
       const activeSessionId = String(
         (sessionSnap && (sessionSnap.activeSessionId || sessionSnap.currentSessionId || sessionSnap.selectedSessionId || sessionSnap.activeId || sessionSnap.selectedId || (sessionSnap.active && sessionSnap.active.id) || (sessionSnap.current && sessionSnap.current.id))) || ''
       )
+      // 快照给不出「当前会话」时，用最近一次手动打开的会话兜底，保证始终有一行处于选中态
+      const currentId = activeSessionId || String(lastPicked || '')
       const projects = Array.isArray(tree) ? mapProjects(tree, wsItems) : null
       const legacy = buildGroups(wsItems)
       // 没归入任何项目的 Workspace 平铺在项目后面，直接按工作区行显示（不再有「其他 Workspace」分组标题）
@@ -623,8 +638,8 @@ window.__ModuleLoader__.load({
       const loose = wsItems.filter(function (ws) { return !covered.has(String(ws.workspaceId)) })
       const needle = query.trim().toLowerCase()
       React.useEffect(function () {
-        if (!activeSessionId) return
-        const node = sessionNodes.current[activeSessionId]
+        if (!currentId) return
+        const node = sessionNodes.current[currentId]
         const box = scrollRef.current
         if (!node || !box) return
         try {
@@ -637,7 +652,7 @@ window.__ModuleLoader__.load({
         } catch (err) {
           if (typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' })
         }
-      }, [activeSessionId, tree, openRoots, openChildren, moreOpen, needle])
+      }, [currentId, tree, openRoots, openChildren, moreOpen, needle])
       function matchesSession(id) {
         if (!needle) return false
         const summary = summaries[id]
@@ -725,6 +740,18 @@ window.__ModuleLoader__.load({
         })
         statusSeen.current = next
       }, [statusMap])
+      function hasCurrentSession(ws) {
+        if (!currentId || !ws) return false
+        return sessionIdsOf(ws).map(String).indexOf(String(currentId)) >= 0
+      }
+      function nodeHasCurrent(node) {
+        if (!currentId || !node) return false
+        if (node.item && node.item.ws && hasCurrentSession(node.item.ws)) return true
+        for (const child of (node.children || [])) {
+          if (nodeHasCurrent(child)) return true
+        }
+        return false
+      }
       function sessionIdsOf(ws) {
         const own = (ws && ws.sessionIds) || []
         const wsId = String((ws && ws.workspaceId) || '')
@@ -747,8 +774,8 @@ window.__ModuleLoader__.load({
       function isChildOpen(key, ws) {
         if (openChildren[key] !== false) return true
         // 当前打开的会话所在的工作区，即使被折叠也强制展开，保证它在侧边栏里可见
-        if (!ws || !activeSessionId) return false
-        return sessionIdsOf(ws).map(String).indexOf(activeSessionId) >= 0
+        if (!ws || !currentId) return false
+        return sessionIdsOf(ws).map(String).indexOf(currentId) >= 0
       }
       function toggleRoot(key) {
         setOpenRoots(function (prev) {
@@ -783,6 +810,7 @@ window.__ModuleLoader__.load({
       }
       function openSession(id) {
         setError('')
+        setLastPicked(String(id || ''))
         try {
           if (uiWorkspace && typeof uiWorkspace.openSession === 'function') uiWorkspace.openSession(id)
           else if (sessions && typeof sessions.open === 'function') sessions.open(id)
@@ -936,12 +964,12 @@ window.__ModuleLoader__.load({
         if (!ids.length) return h('div', { className: 'sbw-empty', style: indent }, '暂无会话')
         if (!visible.length) return null
         // 当前会话就在这个工作区里时，直接铺开全部会话，保证它落在可见范围
-        const activeInside = String(activeSessionId) !== '' && visible.map(String).indexOf(activeSessionId) >= 0
+        const activeInside = String(currentId) !== '' && visible.map(String).indexOf(currentId) >= 0
         const expanded = moreOpen[key] === true || activeInside
         const shown = expanded || needle ? visible : visible.slice(0, SESSION_PREVIEW)
         const rows = shown.map(function (id) {
           const summary = summaries[id]
-          const active = String(id) === activeSessionId
+          const active = String(id) === String(currentId)
           const renaming = renamingSession === String(id)
           const status = statusOf(id)
           const running = Boolean(status && status.running && !status.pendingInteraction)
@@ -1117,7 +1145,7 @@ window.__ModuleLoader__.load({
         }, glyph('IconTrashOutlineRegular', 14, '删')))
         return h('div', { key: key },
           rowShell({
-            className: 'sbw-row sbw-ws',
+            className: 'sbw-row sbw-ws' + (hasCurrentSession(ws) ? ' has-active' : ''),
             title: ws.path,
             open: open,
             activity: wsActivity(ws),
@@ -1164,8 +1192,8 @@ window.__ModuleLoader__.load({
       }
       // 目录节点下面是否挂着「当前打开的会话」，是的话该目录也强制展开
       function dirHasActive(node) {
-        if (!activeSessionId) return false
-        if (node.item && node.item.ws && sessionIdsOf(node.item.ws).map(String).indexOf(activeSessionId) >= 0) return true
+        if (!currentId) return false
+        if (node.item && node.item.ws && sessionIdsOf(node.item.ws).map(String).indexOf(currentId) >= 0) return true
         for (const child of node.children.values()) {
           if (dirHasActive(child)) return true
         }
@@ -1189,7 +1217,7 @@ window.__ModuleLoader__.load({
         const rows = []
         rows.push(rowShell({
           rowKey: key + ':row',
-          className: 'sbw-row sbw-dir',
+          className: 'sbw-row sbw-dir' + (nodeHasCurrent(node) ? ' has-active' : ''),
           title: node.path + ' · ' + countLeaves(node) + ' 个子工作区',
           open: open,
           activity: nodeActivity(node),
@@ -1297,7 +1325,7 @@ window.__ModuleLoader__.load({
           return sessionIdsOf(ws).some(matchesSession)
         })
         if (needle && !children.length && String(project.root + ' ' + project.path).toLowerCase().indexOf(needle) < 0) return null
-        const open = needle ? true : (rootOpen || Boolean(project.selfWs && activeSessionId && sessionIdsOf(project.selfWs).map(String).indexOf(activeSessionId) >= 0))
+        const open = needle ? true : (rootOpen || Boolean(project.selfWs && currentId && sessionIdsOf(project.selfWs).map(String).indexOf(currentId) >= 0))
         // 叶子项目：项目根目录自身就是一个 Workspace，没有再细分的子工作区
         if (!project.children.length && project.selfWs) {
           const ws = project.selfWs
@@ -1429,13 +1457,13 @@ window.__ModuleLoader__.load({
           : null
       })()
       // 当前会话：标题栏下面固定一行，提醒「我刚才在跟哪个会话说话」，点一下滚过去
-      const currentLabel = activeSessionId && summaries[activeSessionId] ? sessionLabel(summaries[activeSessionId]) : ''
-      const nowBar = (activeSessionId && currentLabel && !searchOpen)
+      const currentLabel = currentId && summaries[currentId] ? sessionLabel(summaries[currentId]) : ''
+      const nowBar = (currentId && currentLabel && !searchOpen)
         ? h('div', {
           className: 'sbw-now',
           title: currentLabel,
           onClick: function () {
-            const node = sessionNodes.current[activeSessionId]
+            const node = sessionNodes.current[currentId]
             if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'center' })
           },
         },
@@ -1714,7 +1742,7 @@ window.__ModuleLoader__.load({
           ? h('div', { className: 'sbw-tabs' }, activeTabs.map(function (tab) {
             return h('button', {
               key: 'tab:' + tab.id,
-              className: 'sbw-tab' + (tab.pending ? ' pending' : '') + (String(tab.id) === activeSessionId ? ' on' : ''),
+              className: 'sbw-tab' + (tab.pending ? ' pending' : '') + (String(tab.id) === String(currentId) ? ' on' : ''),
               title: tab.label + (tab.pending ? ' · 等待你处理' : (tab.running ? ' · 正在回答' : ' · 已完成未查看')),
               onClick: function () { openSession(tab.id) },
             },
