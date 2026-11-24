@@ -887,6 +887,21 @@ window.__ModuleLoader__.load({
         } catch (err) { void err }
         return true
       }
+      async function archiveSession(sessionId, label) {
+        const id = String(sessionId || '')
+        if (!id) return
+        if (!confirmAction('归档会话「' + (label || id) + '」？\n归档后它不会再出现在侧边栏里，之后可以在会话归档中恢复。')) return
+        setError('')
+        try {
+          if (!uiWorkspace || typeof uiWorkspace.archiveSession !== 'function') throw new Error('当前版本不支持归档会话')
+          await uiWorkspace.archiveSession(id, { stopActivity: false })
+          if (String(lastPicked) === id) setLastPicked('')
+          await loadTree()
+          notifyChanged()
+        } catch (err) {
+          setError('归档失败：' + (err && err.message ? err.message : String(err)))
+        }
+      }
       async function removeWorkspace(ws, label) {
         if (!ws || !ws.workspaceId) return
         const name = label || ws.title || baseName(ws.path)
@@ -1449,6 +1464,7 @@ window.__ModuleLoader__.load({
             : null,
           h('span', { className: 'sbw-time' }, formatRelative(sessionStamp(summary, id))),
           h('span', { className: 'sbw-actions' },
+            h('button', { className: 'sbw-mini sbw-opt sbw-danger', title: '归档这个会话', onClick: function (e) { e.stopPropagation(); archiveSession(id, label) } }, glyph('IconTrashOutlineRegular', 14, '删')),
             h('button', { className: 'sbw-mini', title: '导出这个会话', onClick: function (e) { e.stopPropagation(); exportSessions([item.ws], label) } }, glyph('IconDownloadOutlineRegular', 14, '⇩'))
           )
         )
@@ -1697,7 +1713,7 @@ window.__ModuleLoader__.load({
                 return ids.length
               })()
                 ? h(React.Fragment, null,
-                  h('div', { className: 'sbw-card-subhead' }, '根目录直接开的会话 · ' + sessionIdsOf(project.selfWs).length),
+                  h('div', { className: 'sbw-card-subhead', title: '这些会话的工作目录就是项目根目录（不是某个子目录）' }, '根目录（未分子目录）· ' + sessionIdsOf(project.selfWs).length + ' 个会话'),
                   h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, (function () {
                     const ids = sessionIdsOf(project.selfWs).map(function (id) { return summaries[id] }).filter(Boolean)
                     ids.sort(function (a, b) { return sessionStamp(b) - sessionStamp(a) })
@@ -1712,7 +1728,14 @@ window.__ModuleLoader__.load({
                 ? h('button', {
                   className: 'sbw-card-more',
                   style: CARD_STYLE.more,
-                  onClick: function (e) { e.stopPropagation(); toggleMore(moreKey) },
+                  title: '打开会话列表（可搜索、可归档）',
+                  onClick: function (e) {
+                    e.stopPropagation()
+                    openSessionList({
+                      title: displayName(project.name || project.root, project.alias),
+                      wsIds: wsIdsOf((project.children || []).map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : [])),
+                    })
+                  },
                 }, '还有 ' + rest + ' 个会话', glyph('IconTriangleRightFillRegular', 10, '▾'))
                 : null
             )
@@ -2201,6 +2224,9 @@ window.__ModuleLoader__.load({
       '.pw-sess-row:hover{background:var(--dsw-alias-interactive-bg-hover)}' +
       '.pw-sess-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary,#4d6bfe)}' +
       '.pw-sess-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px}' +
+      '.pw-sess-del{flex:none;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:0;transition:opacity 120ms ease,color 120ms ease}' +
+      '.pw-sess-row:hover .pw-sess-del{opacity:1}' +
+      '.pw-sess-del:hover{color:var(--dsw-alias-state-error-primary,#d14343);background:var(--dsw-alias-interactive-bg-hover)}' +
       '.pw-sess-time{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
       '.pw-footer{flex:none;position:sticky;bottom:-2px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0 2px;background:var(--dsw-alias-bg-layer-1,transparent);border-top:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}' +
       '.pw-footer-actions{display:flex;align-items:center;gap:8px}'
@@ -2829,7 +2855,8 @@ window.__ModuleLoader__.load({
       const setSeed = pair[1]
       const snapshot = useSnapshot(props.services.sessions.list)
       const [query, setQuery] = useState('')
-      useEffect(function () { setQuery('') }, [seed])
+      const [archiveError, setArchiveError] = useState('')
+      useEffect(function () { setQuery(''); setArchiveError('') }, [seed])
       if (!seed) return null
       const wanted = seed.wsIds || []
       const all = (snapshot.items || []).filter(function (item) {
@@ -2872,11 +2899,25 @@ window.__ModuleLoader__.load({
                 },
                   h('span', { className: 'pw-sess-dot' }),
                   h('span', { className: 'pw-sess-title' }, sessionLabel(item)),
-                  h('span', { className: 'pw-sess-time' }, formatRelative(sessionStamp(item)))
+                  h('span', { className: 'pw-sess-time' }, formatRelative(sessionStamp(item))),
+                  h('button', {
+                    className: 'pw-sess-del',
+                    title: '归档这个会话',
+                    onClick: function (event) {
+                      event.stopPropagation()
+                      const sessionId = String(item.id)
+                      if (typeof window !== 'undefined' && typeof window.confirm === 'function'
+                        && !window.confirm('归档会话「' + sessionLabel(item) + '」？\n归档后不会再出现在侧边栏，可在会话归档里恢复。')) return
+                      Promise.resolve(props.services.uiWorkspace.archiveSession(sessionId, { stopActivity: false }))
+                        .then(function () { setArchiveError('') })
+                        .catch(function (err) { setArchiveError('归档失败：' + (err && err.message ? err.message : String(err))) })
+                    },
+                  }, glyph('IconTrashOutlineRegular', 13, '删'))
                 )
               })
               : h('div', { className: 'pw-muted' }, '没有匹配的会话'))
-            : h('div', { className: 'pw-muted' }, '这个目录下还没有会话')
+            : h('div', { className: 'pw-muted' }, '这个目录下还没有会话'),
+          archiveError ? h('div', { className: 'pw-msg err' }, archiveError) : null
         )
       )
     }
