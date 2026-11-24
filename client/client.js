@@ -2107,22 +2107,22 @@ window.__ModuleLoader__.load({
     ].join('')
 
     const TABS_CSS = [
-      '.pwt-band{box-sizing:border-box;z-index:40;display:flex;align-items:center;height:36px;padding:0 12px;background:var(--dsw-alias-bg-base,#fff);border-bottom:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
+      '.pwt-band{box-sizing:border-box;z-index:40;display:flex;align-items:center;height:38px;padding:0 14px;gap:10px;background:var(--dsw-alias-bg-base,#fff);border-bottom:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
       '.pwt-probe{position:absolute;width:1px;height:1px;pointer-events:none;opacity:0}',
-      '.pwt-inner{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px}',
-      '.pwt{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:4px;overflow-x:auto;scrollbar-width:none}',
+      '.pwt-inner{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:10px}',
+      '.pwt{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-behavior:smooth;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}',
       '.pwt::-webkit-scrollbar{display:none}',
-      '.pwt-tab{flex:none;display:inline-flex;align-items:center;max-width:200px;height:26px;border-radius:999px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);border:0.5px solid transparent;transition:background-color 120ms ease,border-color 120ms ease}',
+      '.pwt-tab{flex:none;display:inline-flex;align-items:center;max-width:220px;height:28px;border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);border:0.5px solid transparent;transition:background-color 120ms ease,border-color 120ms ease,transform 120ms ease}',
       '.pwt-tab:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06))}',
-      '.pwt-tab.on{background:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 14%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 30%,transparent)}',
-      '.pwt-hit{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;height:100%;padding:0 4px 0 10px;border:none;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit}',
+      '.pwt-tab.on{background:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 13%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 28%,transparent)}',
+      '.pwt-hit{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;height:100%;padding:0 8px 0 11px;border:none;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:13px;line-height:18px}',
       '.pwt-tab.on .pwt-hit{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
-      '.pwt-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;line-height:16px}',
-      '.pwt-x{flex:none;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:4px;border:none;border-radius:50%;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:0;transition:opacity 120ms ease,background-color 120ms ease}',
-      '.pwt-tab:hover .pwt-x{opacity:1}',
-      '.pwt-x:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary)}',
-      '.pwt-add{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
-      '.pwt-add:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary)}',
+      '.pwt-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pwt-x{flex:none;display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-right:5px;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:0;transition:opacity 120ms ease,background-color 120ms ease,color 120ms ease}',
+      '.pwt-tab:hover .pwt-x,.pwt-tab.on .pwt-x{opacity:1}',
+      '.pwt-x:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.08));color:var(--dsw-alias-label-primary)}',
+      '.pwt-add{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background-color 120ms ease,color 120ms ease}',
+      '.pwt-add:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.08));color:var(--dsw-alias-label-primary)}',
     ].join('')
 
     const CSS = SIDEBAR_CSS + DIALOG_CSS + REFINE_CSS + TABS_CSS
@@ -3013,6 +3013,7 @@ window.__ModuleLoader__.load({
         const [order, setOrder] = useState(readTabs)
         const [box, setBox] = useState(null)          // { left, top, width, header }
         const probeRef = React.useRef(null)
+        const listRef = React.useRef(null)
         useEffect(function () {
           if (!activeId) return
           setOrder(function (prev) {
@@ -3084,7 +3085,18 @@ window.__ModuleLoader__.load({
           h('span', { ref: probeRef, className: 'pwt-probe' }),
           list.length
             ? h('div', { className: 'pwt-inner' },
-              h('div', { className: 'pwt', role: 'tablist' },
+              h('div', {
+                className: 'pwt',
+                role: 'tablist',
+                ref: listRef,
+                onWheel: function (e) {
+                  const el = listRef.current
+                  if (!el || !el.scrollWidth || el.scrollWidth <= el.clientWidth) return
+                  if (!e.deltaY) return
+                  el.scrollLeft += e.deltaY
+                  if (e.preventDefault) e.preventDefault()
+                },
+              },
                 list.map(function (id) {
                   return h('div', { key: 'tab:' + id, className: 'pwt-tab' + (id === activeId ? ' on' : ''), role: 'tab', title: sessionLabel(summaries[id]) },
                     h('button', {
