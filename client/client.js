@@ -113,6 +113,12 @@ window.__ModuleLoader__.load({
       '.sbw-flat{display:flex;flex-direction:column}',
       '.sbw-flat-row{gap:8px}',
       '.sbw-ws-hint{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-hd-cur{flex:0 1 auto;min-width:0;max-width:138px;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;margin-left:2px;border:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.18));border-radius:999px;background:var(--dsw-alias-bg-layer-2,#f5f6f8);color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:16px;cursor:pointer;overflow:hidden}',
+      '.sbw-hd-cur:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.sbw-hd-cur-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary,#4d6bfe)}',
+      '.sbw-hd-cur-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.sbw-branch{position:relative}',
+      '.sbw-tabs{height:auto}',
       '.sbw-ibtn.on{background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 14%, transparent);color:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-cur{flex:none;font-size:11px;line-height:17px;padding:0 6px;border-radius:999px;color:var(--dsw-alias-brand-primary,#4d6bfe);background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 16%, transparent)}' +
       '.sbw-sess.selected{position:relative;background-color:rgba(77,107,254,.18);background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 20%, transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 30%, transparent)}',
@@ -966,7 +972,7 @@ window.__ModuleLoader__.load({
         if (!isChildOpen(key)) return null
         const ids = sessionIdsOf(ws)
         const visible = needle ? ids.filter(matchesSession) : ids
-        const indent = { '--sbw-indent': (depth * 14) + 'px' }
+        const indent = { '--sbw-indent': (depth * 12) + 'px' }
         if (!ids.length) return h('div', { className: 'sbw-empty', style: indent }, '暂无会话')
         if (!visible.length) return null
         // 当前会话就在这个工作区里时，直接铺开全部会话，保证它落在可见范围
@@ -1152,11 +1158,11 @@ window.__ModuleLoader__.load({
         return h('div', { key: key },
           rowShell({
             className: 'sbw-row sbw-ws' + (hasCurrentSession(ws) ? ' has-active' : ''),
-            title: ws.path,
+            title: withActivity(ws.path, wsActivity(ws)),
             open: open,
             activity: wsActivity(ws),
             onFolderClick: function () { openSessionList({ title: (label || ws.title || ws.path), wsIds: wsIdsOf([ws]) }) },
-            style: { '--sbw-indent': (depth * 14) + 'px' },
+            style: { '--sbw-indent': (depth * 12) + 'px' },
             onClick: function () { toggleChild(key) },
             text: h('span', { className: 'sbw-text' },
               h('span', { className: 'sbw-title' }, displayName(label, child && child.alias)),
@@ -1164,7 +1170,7 @@ window.__ModuleLoader__.load({
             ),
             actions: h('span', { className: 'sbw-actions' }, actions),
           }),
-          sessionRows(ws, key, depth + 1)
+          h('div', { className: 'sbw-branch', style: { '--sbw-guide': ((depth + 1) * 14 + 6) + 'px' } }, sessionRows(ws, key, depth + 1))
         )
       }
       // 子目录按相对项目根目录的路径分段聚成一棵树：同父目录（public/web、public/page）自动合并到 public 下
@@ -1206,7 +1212,7 @@ window.__ModuleLoader__.load({
         return false
       }
       function dirNode(node, key, depth, project) {
-        const indent = { '--sbw-indent': (depth * 14) + 'px' }
+        const indent = { '--sbw-indent': (depth * 12) + 'px' }
         const hasChildren = node.children.size > 0
         if (!hasChildren) {
           const item = node.item
@@ -1224,7 +1230,7 @@ window.__ModuleLoader__.load({
         rows.push(rowShell({
           rowKey: key + ':row',
           className: 'sbw-row sbw-dir' + (nodeHasCurrent(node) ? ' has-active' : ''),
-          title: node.path + ' · ' + countLeaves(node) + ' 个子工作区',
+          title: withActivity(node.path + ' · ' + countLeaves(node) + ' 个子工作区', nodeActivity(node)),
           open: open,
           activity: nodeActivity(node),
           onFolderClick: function () { openSessionList({ title: node.name, wsIds: nodeWsIds(node) }) },
@@ -1234,6 +1240,7 @@ window.__ModuleLoader__.load({
           actions: h('span', { className: 'sbw-count' }, String(countLeaves(node)))
         }))
         if (!open) return h('div', { key: key }, rows)
+        return h('div', { key: key, className: 'sbw-branch', style: { '--sbw-guide': (depth * 14 + 20) + 'px' } }, rows)
         for (const entry of Array.from(node.children.entries()).sort(function (a, b) { return a[0].localeCompare(b[0]) })) {
           rows.push(dirNode(entry[1], key + '/' + entry[0], depth + 1, project))
         }
@@ -1248,6 +1255,16 @@ window.__ModuleLoader__.load({
         if (rollup.running) return 'ongoing'
         if (rollup.unread) return 'done'
         return ''
+      }
+      function activityText(activity) {
+        if (activity === 'ongoing') return '正在回答'
+        if (activity === 'warning') return '等待你处理'
+        if (activity === 'done') return '有已完成未查看'
+        return ''
+      }
+      function withActivity(text, activity) {
+        const word = activityText(activity)
+        return word ? (text + ' · ' + word) : text
       }
       function wsRollup(ws) {
         let running = 0
@@ -1338,7 +1355,7 @@ window.__ModuleLoader__.load({
           return h('div', { key: project.id },
             rowShell({
               className: projectRowClass(project, 'sbw-row sbw-ws sbw-leaf'),
-              title: ws.path,
+              title: withActivity(ws.path, wsActivity(ws)),
               open: open,
               color: project.color,
               activity: wsActivity(ws),
@@ -1360,14 +1377,14 @@ window.__ModuleLoader__.load({
                 h('button', { className: 'sbw-mini sbw-danger', title: '删除工作区', onClick: function (e) { e.stopPropagation(); removeWorkspace(ws, project.root) } }, glyph('IconTrashOutlineRegular', 14, '删'))
               ),
             }),
-            open ? sessionRows(ws, project.id, 1) : null
+            open ? h('div', { className: 'sbw-branch', style: { '--sbw-guide': '20px' } }, sessionRows(ws, project.id, 1)) : null
           )
         }
         const isRenaming = renaming === project.id
         return h('div', { key: project.id },
           rowShell({
             className: projectRowClass(project, 'sbw-row sbw-proj'),
-            title: project.path,
+            title: withActivity(project.path, rollupActivity(projectRollup(project))),
             open: open,
             color: project.color,
             activity: rollupActivity(projectRollup(project)),
@@ -1411,9 +1428,10 @@ window.__ModuleLoader__.load({
           }),
           open ? (function () {
             const root = childTree({ root: project.root, path: project.path, children: children })
-            return Array.from(root.children.entries())
-              .sort(function (a, b) { return a[0].localeCompare(b[0]) })
-              .map(function (entry) { return dirNode(entry[1], project.id + '/d:' + entry[0], 1, project) })
+            return h('div', { className: 'sbw-branch', style: { '--sbw-guide': '20px' } },
+              Array.from(root.children.entries())
+                .sort(function (a, b) { return a[0].localeCompare(b[0]) })
+                .map(function (entry) { return dirNode(entry[1], project.id + '/d:' + entry[0], 1, project) }))
           })() : null
         )
       }
@@ -1462,20 +1480,19 @@ window.__ModuleLoader__.load({
           ? { running: runningIds.length, pending: pendingIds.length, runningIds: runningIds, pendingIds: pendingIds }
           : null
       })()
-      // 当前会话：标题栏下面固定一行，提醒「我刚才在跟哪个会话说话」，点一下滚过去
+      // 当前会话：并进标题栏，点一下把列表滚到它
       const currentLabel = currentId && summaries[currentId] ? sessionLabel(summaries[currentId]) : ''
-      const nowBar = (currentId && currentLabel && !searchOpen)
-        ? h('div', {
-          className: 'sbw-now',
-          title: currentLabel,
+      const currentChip = (currentId && currentLabel && !searchOpen && !flatMode)
+        ? h('button', {
+          className: 'sbw-hd-cur',
+          title: '当前会话：' + currentLabel + '（点击定位）',
           onClick: function () {
             const node = sessionNodes.current[currentId]
             if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'center' })
           },
         },
-          h('span', { className: 'sbw-now-dot' }),
-          h('span', { className: 'sbw-now-label' }, '当前会话'),
-          h('span', { className: 'sbw-now-title' }, currentLabel))
+          h('span', { className: 'sbw-hd-cur-dot' }),
+          h('span', { className: 'sbw-hd-cur-t' }, currentLabel))
         : null
       // 顶部标签条：把正在回答 / 等待处理（以及未读完成）的会话铺在最上面，点一下就切过去
       const activeTabs = (function () {
@@ -1709,6 +1726,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'sbw sbw-wide', style: uiVars, ref: rootRef },
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
           searchOpen ? null : h('span', { className: 'sbw-hd-label' }, flatMode ? ('所有会话 · ' + flatRows.length) : '工作区'),
+          currentChip,
           searchOpen || !headerSum ? null : h('span', { className: 'sbw-hd-sum', title: (headerSum.running ? headerSum.running + ' 个会话正在回答' : '') + (headerSum.pending ? (headerSum.running ? '，' : '') + headerSum.pending + ' 个等待你处理' : '') },
             headerSum.pending ? h('button', {
               className: 'sbw-roll-item sbw-roll-btn',
@@ -1771,7 +1789,6 @@ window.__ModuleLoader__.load({
           )
         ),
         error ? h('div', { className: 'sbw-msg' }, error) : null,
-        nowBar,
         activeTabs.length > 1
           ? h('div', { className: 'sbw-tabs' }, activeTabs.map(function (tab) {
             return h('button', {
@@ -2040,6 +2057,10 @@ window.__ModuleLoader__.load({
       '.pw-card{border-color:var(--dsw-alias-border-l2,rgba(127,127,127,.2))}',
       '.pw-toast{border-radius:var(--dsw-radius-lg,14px);transition:transform 120ms ease,box-shadow 120ms ease}',
       '.pw-toast:hover{transform:translateX(-2px);box-shadow:0 10px 28px rgba(0,0,0,.2)}',
+      '.sbw-tab{height:22px;padding:0 8px;font-size:11.5px;line-height:16px}',
+      '.sbw-filter{height:22px;font-size:11.5px;line-height:16px}',
+      '.sbw-sect-head{margin-top:2px}',
+      '.sbw-branch > * + *{margin-top:1px}',
     ].join('')
     const CSS = SIDEBAR_CSS + DIALOG_CSS + REFINE_CSS
 
@@ -2793,6 +2814,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'pw-card' },
           h('h3', null, '外观（正在回答的会话）'),
           h('p', { className: 'pw-muted' }, '只影响左侧工作区列表里「正在回答」的会话行；留空即用主题默认色。'),
+            h('p', { className: 'pw-muted' }, '侧边栏状态：蓝环＝正在回答，琥珀点＝等你处理，绿点＝已完成未查看；目录图标右上角的小圆点是它下面会话的状态汇总。'),
           h('div', { className: 'pw-row pw-row-wrap' },
             h('label', { className: 'pw-field' },
               h('span', null, '背景色'),
