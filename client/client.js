@@ -92,6 +92,9 @@ window.__ModuleLoader__.load({
       '.sbw-input{flex:1;min-width:0;font-family:inherit;font-size:14px;line-height:20px;padding:0 2px;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-sm,8px);background:var(--dsw-alias-button-elevated-fill,var(--dsw-alias-bg-layer-1));color:inherit;outline:none}',
       '.sbw-sess{height:32px;gap:0}',
       '.sbw-sess .sbw-title{margin:0 6px 0 var(--dsh-sidebar-label-gap,6px)}',
+      '.sbw-sess.running{background:var(--sbw-run-bg,color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 10%, transparent));color:var(--sbw-run-fg,inherit)}',
+      '.sbw-sess.running .sbw-title{color:inherit}',
+      '.sbw-sess.running:hover{filter:brightness(.985)}',
       '.sbw-sess.selected{position:relative;background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 12%, transparent)}',
       '.sbw-sess.selected::before{content:"";position:absolute;top:7px;bottom:7px;left:6px;width:2px;border-radius:1px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-sess.selected .sbw-title{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
@@ -358,6 +361,7 @@ window.__ModuleLoader__.load({
       const wsSnap = useSnapshot(workspaces && workspaces.list)
       const sessionSnap = useSnapshot(sessions && sessions.list)
       const [tree, setTree] = useState(null)
+      const [uiConfig, setUiConfig] = useState({})
       const [query, setQuery] = useState('')
       const [tagFilter, setTagFilter] = useState('')
       const [searchOpen, setSearchOpen] = useState(false)
@@ -428,6 +432,7 @@ window.__ModuleLoader__.load({
           const body = await response.json().catch(function () { return {} })
           if (!response.ok || body.ok === false) throw new Error(body.error || ('读取项目失败：' + response.status))
           setTree(body.projects || [])
+          setUiConfig(body.ui || {})
           setError('')
         } catch (err) {
           setTree(null)
@@ -866,9 +871,11 @@ window.__ModuleLoader__.load({
           const summary = summaries[id]
           const active = String(id) === activeSessionId
           const renaming = renamingSession === String(id)
+          const status = statusOf(id)
+          const running = Boolean(status && status.running && !status.pendingInteraction)
           return h('div', {
             key: key + ':' + String(id),
-            className: 'sbw-row sbw-sess' + (active ? ' selected' : ''),
+            className: 'sbw-row sbw-sess' + (active ? ' selected' : '') + (running ? ' running' : ''),
             role: 'treeitem',
             title: sessionLabel(summary),
             style: indent,
@@ -1344,7 +1351,11 @@ window.__ModuleLoader__.load({
       const tempVisible = looseVisible.filter(isTempWs)
       const otherLoose = looseVisible.filter(function (ws) { return !isTempWs(ws) })
       const empty = !hasProjects && !looseVisible.length && !(legacy.length && !tree)
-      return h('div', { className: 'sbw sbw-wide' },
+      const uiSettings = uiConfig || {}
+      const uiVars = {}
+      if (uiSettings.runningBg) uiVars['--sbw-run-bg'] = uiSettings.runningBg
+      if (uiSettings.runningFg) uiVars['--sbw-run-fg'] = uiSettings.runningFg
+      return h('div', { className: 'sbw sbw-wide', style: uiVars },
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
           searchOpen ? null : h('span', { className: 'sbw-hd-label' }, '工作区'),
           searchOpen || !headerSum ? null : h('span', { className: 'sbw-hd-sum', title: (headerSum.running ? headerSum.running + ' 个会话正在回答' : '') + (headerSum.pending ? (headerSum.running ? '，' : '') + headerSum.pending + ' 个等待你处理' : '') },
@@ -1473,6 +1484,7 @@ window.__ModuleLoader__.load({
       projectPin: '/dsh-project-workspaces/project/pin',
       projectReorder: '/dsh-project-workspaces/project/reorder',
       exportSessions: '/dsh-project-workspaces/export',
+      ui: '/dsh-project-workspaces/ui',
       tempSession: '/dsh-project-workspaces/temp-session',
       open: '/dsh-project-workspaces/open',
       autoGroup: '/dsh-project-workspaces/project/auto-group'
@@ -1559,6 +1571,11 @@ window.__ModuleLoader__.load({
       '.pw-color.on{box-shadow:0 0 0 2px var(--dsw-alias-bg-layer-1,#fff),0 0 0 4px color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 60%,transparent)}' +
       '.pw-color-none{background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 8%,transparent);position:relative}' +
       '.pw-color-none::after{content:"";position:absolute;left:5px;right:5px;top:50%;height:1px;background:var(--dsw-alias-label-tertiary);transform:rotate(-45deg)}' +
+      '.pw-color-line{display:flex;align-items:center;gap:8px;min-width:0}' +
+      '.pw-color-line input[type=color]{flex:none;width:32px;height:32px;padding:0;border:0.5px solid var(--dsw-alias-border-l4,rgba(127,127,127,.4));border-radius:8px;background:transparent;cursor:pointer}' +
+      '.pw-row-wrap{flex-wrap:wrap}' +
+      '.pw-preview{display:flex;align-items:center;gap:8px;height:32px;margin-top:10px;padding:0 10px;border-radius:var(--dsw-radius-md,12px);font-size:13px;color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 10%,transparent)}' +
+      '.pw-preview-dot{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary,#4d6bfe)}' +
       '.pw-footer{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}' +
       '.pw-footer-actions{display:flex;align-items:center;gap:8px}'
     const CSS = SIDEBAR_CSS + DIALOG_CSS
@@ -2142,6 +2159,23 @@ window.__ModuleLoader__.load({
         try { const body = await postJson(API.projectRemove, { projectId: projectId }); setState(body.state); setMessage('已移出项目树，Workspace 注册和会话历史都保留。'); notifyChanged() }
         catch (err) { setError(errorText(err)) } finally { setBusy(false) }
       }
+      const [runBg, setRunBg] = useState('')
+      const [runFg, setRunFg] = useState('')
+      useEffect(function () {
+        if (!state) return
+        const ui = state.ui || {}
+        setRunBg(ui.runningBg || '')
+        setRunFg(ui.runningFg || '')
+      }, [state])
+      async function saveUi(bg, fg) {
+        setBusy(true); setError(''); setMessage('')
+        try {
+          const body = await postJson(API.ui, { runningBg: bg, runningFg: fg })
+          setState(body.state)
+          setMessage(bg || fg ? '已保存外观设置，左侧正在回答的会话会立即换色。' : '已恢复默认外观。')
+          notifyChanged()
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
       async function autoGroup() {
         setBusy(true); setError(''); setMessage('')
         try {
@@ -2173,6 +2207,34 @@ window.__ModuleLoader__.load({
         ),
         error ? h('div', { className: 'pw-msg err' }, error) : null,
         message ? h('div', { className: 'pw-msg' }, message) : null,
+        h('div', { className: 'pw-card' },
+          h('h3', null, '外观（正在回答的会话）'),
+          h('p', { className: 'pw-muted' }, '只影响左侧工作区列表里「正在回答」的会话行；留空即用主题默认色。'),
+          h('div', { className: 'pw-row pw-row-wrap' },
+            h('label', { className: 'pw-field' },
+              h('span', null, '背景色'),
+              h('div', { className: 'pw-color-line' },
+                h('input', { type: 'color', value: runBg || '#eef2ff', onChange: function (e) { setRunBg(e.target.value) } }),
+                h('input', { className: 'pw-input', value: runBg, placeholder: '#eef2ff 或留空', onChange: function (e) { setRunBg(e.target.value) } })
+              )
+            ),
+            h('label', { className: 'pw-field' },
+              h('span', null, '文字色'),
+              h('div', { className: 'pw-color-line' },
+                h('input', { type: 'color', value: runFg || '#1f2937', onChange: function (e) { setRunFg(e.target.value) } }),
+                h('input', { className: 'pw-input', value: runFg, placeholder: '#1f2937 或留空', onChange: function (e) { setRunFg(e.target.value) } })
+              )
+            )
+          ),
+          h('div', { className: 'pw-preview', style: { background: runBg || undefined, color: runFg || undefined } },
+            h('span', { className: 'pw-preview-dot' }),
+            h('span', null, '正在回答的会话看起来是这样')
+          ),
+          h('div', { className: 'pw-row' },
+            h('button', { className: 'pw-btn primary', disabled: busy, onClick: function () { saveUi(String(runBg || '').trim(), String(runFg || '').trim()) } }, '保存外观'),
+            h('button', { className: 'pw-btn', disabled: busy, onClick: function () { setRunBg(''); setRunFg(''); saveUi('', '') } }, '恢复默认')
+          )
+        ),
         h('div', { className: 'pw-card' },
           h('h3', null, '项目（根目录 → 子工作区）'),
           projects.length

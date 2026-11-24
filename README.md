@@ -90,6 +90,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **当前会话高亮 + 自动滚动**：正在用的会话在侧边栏里始终有品牌色底 + 左侧 2px 竖条 + 品牌色标题；打开/切换会话时侧边栏自动滚到它，被折叠的工作区与目录、以及超过 6 条的会话列表都会为它自动展开
 - **项目颜色**：编辑项目时可以从 8 个色标里挑一个，侧边栏里项目行的文件夹图标随之变色，深色浅色都适配
 - **空态与加载骨架**：首次加载先铺 4 行脉冲骨架；没有任何项目时显示图标 + 说明 + 「新增工作区」按钮，筛选无结果时给出对应提示
+- **运行中会话配色**：设置 →「项目工作区」→ 外观，可以给「正在回答」的会话行配背景色和文字色（各带取色器 + 十六进制输入 + 实时预览），保存后立即生效；留空即用主题默认
 - **目录图标状态徽标**：项目 / 合并目录 / 子工作区行左侧的文件夹图标右下角会挂一个小徽标——正在回答是蓝色转圈，等待你处理是琥珀点，已完成未查看是绿点；合并目录会聚合成整棵子树里最需要关注的那个状态
 - **活跃会话标签条**：正在回答 / 等待处理 / 已完成未查看的会话会以胶囊标签排在最上面，点一下直接切到那个会话，最多 8 个，全部空闲时整条隐藏
 - **角标可点击**：项目行右侧的「待处理 / 在跑 / 未读」计数本身就是按钮，点一下跳到该项目第一个对应状态的会话
@@ -125,6 +126,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 | `/dsh-project-workspaces/project/reorder` | POST | `{projectIds[]}` 按给定顺序重排项目，未列出的项目追加在后面，返回 `{ok, state}` |
 | `/dsh-project-workspaces/project/auto-group` | POST | `{minChildren=2}` 按父目录把现有 Workspace 自动归组为项目 |
 | `/dsh-project-workspaces/temp-session` | POST | 在系统临时目录建 `dsh-temp-<时间戳>` 并注册工作区，返回 `{ok, workspaceId, path, title, state}` |
+| `/dsh-project-workspaces/ui` | POST | `{runningBg, runningFg}` 保存侧边栏外观（正在回答会话的背景色/文字色，留空即默认），返回 `{ok, ui, state}` |
 | `/dsh-project-workspaces/export` | POST | `{label, sessionIds[]}` 把若干会话渲染成 Markdown 返回 `{ok, filename, count, sessions[], content}`（会话由宿主 `sessionQuery` 读取） |
 | `/dsh-project-workspaces/open` | POST | `{path}` 结束后台进程打开该目录（`explorer.exe` / `open` / `xdg-open`） |
 | `/dsh-project-workspaces/project/remove` | POST | `{projectId}` 只把项目移出树，Workspace 会话历史保留 |
@@ -151,7 +153,7 @@ DSH 原生 Workspace 不能嵌套：会话 cwd 必须等于 Workspace 路径，�
 
 ```
 client/client.js      客户端半边：侧边栏（替换原生工作区区域）、新增工作区弹窗、编辑弹窗、设置面板
-lib/index.js          宿主半边：project-workspaces.json 持久化 + 16 条 HTTP 路由（含临时会话 / 导出 / 置顶 / 拖拽排序 / 递归扫描）
+lib/index.js          宿主半边：project-workspaces.json 持久化 + 17 条 HTTP 路由（含临时会话 / 导出 / 置顶 / 拖拽排序 / 递归扫描）
 cordis.patch.yml      Loader patch（insert project-workspaces）
 ```
 
