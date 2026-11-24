@@ -1446,6 +1446,20 @@ window.__ModuleLoader__.load({
           )
         )
       }
+      // 关键布局一律内联：即使注入的样式表被缓存/裁剪，卡片也不会散架
+      const CARD_STYLE = {
+        card: { display: 'flex', flexDirection: 'column', margin: '4px 2px 6px', border: '0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.22))', borderRadius: '10px', background: 'var(--dsw-alias-bg-layer-1,#fff)', overflow: 'hidden', minWidth: '0', maxWidth: '100%' },
+        hd: { display: 'flex', alignItems: 'center', gap: '6px', minHeight: '32px', padding: '0 4px 0 8px', minWidth: '0', cursor: 'pointer' },
+        name: { flex: '1 1 auto', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13.5px', lineHeight: '20px', fontWeight: 600 },
+        tools: { flex: 'none', display: 'flex', alignItems: 'center', gap: '2px' },
+        meta: { display: 'flex', alignItems: 'center', gap: '6px', padding: '0 8px 4px 16px', minWidth: '0' },
+        path: { flex: '0 1 auto', minWidth: '0', maxWidth: '100%', fontSize: '11px', lineHeight: '15px', color: 'var(--dsw-alias-label-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+        subs: { display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '2px 8px 6px 14px', minWidth: '0' },
+        chip: { display: 'inline-flex', alignItems: 'center', gap: '4px', height: '20px', padding: '0 6px', border: '0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.24))', borderRadius: '999px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', fontFamily: 'inherit', fontSize: '11px', lineHeight: 1, cursor: 'pointer', maxWidth: '100%', minWidth: '0' },
+        sessList: { display: 'flex', flexDirection: 'column', gap: '1px', padding: '0 2px', minWidth: '0' },
+        mini: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', padding: 0, border: 'none', background: 'transparent', borderRadius: '6px', color: 'inherit', cursor: 'pointer', flex: 'none' },
+        more: { display: 'block', width: '100%', textAlign: 'left', padding: '4px 8px 6px 14px', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-tertiary)', fontFamily: 'inherit', fontSize: '11.5px', cursor: 'pointer', borderRadius: '8px' },
+      }
       function projectCard(project) {
         const open = needle ? true : isRootOpen(project.id)
         const rollup = projectRollup(project)
@@ -1462,9 +1476,10 @@ window.__ModuleLoader__.load({
         }
         const rest = all.length - shown.length
         const subs = (project.children || []).filter(function (item) { return item.ws })
-        return h('div', { key: project.id, className: 'sbw-card' + (project.pinned ? ' is-pinned' : '') },
+        return h('div', { key: project.id, className: 'sbw-card' + (project.pinned ? ' is-pinned' : ''), style: CARD_STYLE.card },
           h('div', Object.assign({
             className: 'sbw-card-hd',
+            style: CARD_STYLE.hd,
             title: withActivity(displayName(project.name || project.root, project.alias) + ' · ' + (project.path || project.root), rollupActivity(rollup)),
             onClick: function () { if (!isRenaming) toggleRoot(project.id) },
           }, projectDragProps(project)),
@@ -1485,9 +1500,9 @@ window.__ModuleLoader__.load({
                   else if (e.key === 'Escape') { e.preventDefault(); setRenaming('') }
                 },
               })
-              : h('span', { className: 'sbw-card-name' }, displayName(project.name || project.root, project.alias)),
+              : h('span', { className: 'sbw-card-name', style: CARD_STYLE.name }, displayName(project.name || project.root, project.alias)),
             rollupBadge(rollup),
-            h('span', { className: 'sbw-card-tools' },
+            h('span', { className: 'sbw-card-tools', style: CARD_STYLE.tools },
               h('button', {
                 className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''),
                 title: project.pinned ? '取消置顶' : '置顶项目',
@@ -1495,6 +1510,7 @@ window.__ModuleLoader__.load({
               }, glyph('IconPinOutlineRegular', 14, '📌')),
               h('button', {
                 className: 'sbw-mini sbw-always',
+                style: CARD_STYLE.mini,
                 title: '新建会话',
                 onClick: function (e) {
                   e.stopPropagation()
@@ -1505,16 +1521,19 @@ window.__ModuleLoader__.load({
               }, glyph('IconNewChatOutlineRegular', 14, '＋')),
               h('button', {
                 className: 'sbw-mini sbw-opt',
+                style: CARD_STYLE.mini,
                 title: '编辑名称 / 别名 / 标签 / 颜色',
                 onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) },
               }, glyph('IconEditOutlineRegular', 14, '✎')),
               h('button', {
                 className: 'sbw-mini sbw-opt',
+                style: CARD_STYLE.mini,
                 title: '在资源管理器中打开目录',
                 onClick: function (e) { e.stopPropagation(); openDir(project.path) },
               }, glyph('IconFolderOpenRegular', 14, '▤')),
               h('button', {
                 className: 'sbw-mini sbw-opt',
+                style: CARD_STYLE.mini,
                 title: '导出该项目的全部会话',
                 onClick: function (e) {
                   e.stopPropagation()
@@ -1523,23 +1542,25 @@ window.__ModuleLoader__.load({
               }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
               h('button', {
                 className: 'sbw-mini sbw-opt sbw-danger',
+                style: CARD_STYLE.mini,
                 title: '移除项目（不删除工作区）',
                 onClick: function (e) { e.stopPropagation(); removeProjectItem(project) },
               }, glyph('IconTrashOutlineRegular', 14, '删'))
             )
           ),
-          h('div', { className: 'sbw-card-meta' },
-            h('span', { className: 'sbw-card-path', title: project.path || project.root }, shortPath(project.path || project.root)),
+          h('div', { className: 'sbw-card-meta', style: CARD_STYLE.meta },
+            h('span', { className: 'sbw-card-path', style: CARD_STYLE.path, title: project.path || project.root }, shortPath(project.path || project.root)),
             tagChips(project.tags)
           ),
           open
             ? h('div', { className: 'sbw-card-body' },
               subs.length > 1
-                ? h('div', { className: 'sbw-card-subs' }, subs.map(function (item) {
+                ? h('div', { className: 'sbw-card-subs', style: CARD_STYLE.subs }, subs.map(function (item) {
                   const state = wsActivity(item.ws)
                   return h('button', {
                     key: 'chip:' + project.id + ':' + item.child.path,
                     className: 'sbw-chip' + (state ? ' act-' + state : ''),
+                    style: CARD_STYLE.chip,
                     title: withActivity(displayName(item.child.name, item.child.alias) + ' · ' + (item.ws ? item.ws.path : item.child.path), state),
                     onClick: function (e) {
                       e.stopPropagation()
@@ -1549,11 +1570,12 @@ window.__ModuleLoader__.load({
                 }))
                 : null,
               shown.length
-                ? h('div', { className: 'sbw-card-sessions' }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id) }))
+                ? h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id) }))
                 : h('div', { className: 'sbw-card-empty' }, '暂无会话'),
               rest > 0
                 ? h('button', {
                   className: 'sbw-card-more',
+                  style: CARD_STYLE.more,
                   onClick: function (e) { e.stopPropagation(); toggleMore(moreKey) },
                 }, '还有 ' + rest + ' 个会话', glyph('IconTriangleRightFillRegular', 10, '▾'))
                 : null
