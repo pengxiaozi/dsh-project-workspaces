@@ -172,3 +172,19 @@ cordis.patch.yml      Loader patch（insert project-workspaces）
 ## License
 
 MIT
+
+## 开发与测试
+
+```bash
+npm install          # 安装 react / react-test-renderer 等开发依赖
+npm test             # 跑宿主与客户端的回归测试（node --test tests/）
+npm run check        # 发布前检查：确保包里只有代码与文案，没有图片
+```
+
+测试目录说明：
+
+- `tests/host.test.cjs`：直接 import 宿主插件，用假 ctx 收集路由后发请求，覆盖 `/project` 增量合并、`/project/update` 别名与颜色、`/tree` 递归扫描与跳过规则、`/remove` 清理项目、`/project/reorder` 与 `/project/pin`
+- `tests/client.test.cjs`：用 vm 载入 `client/client.js` 后以 react-test-renderer 挂载组件，覆盖槽位注册、Windows 路径截断、卡片目录树展开、会话归档、会话标签条、无布局祖先时不崩
+- `tests/helpers.cjs`：最小运行环境（假 document / window / localStorage / fetch / primitives）
+
+改完代码请先 `npm test` 再 `git commit`，避免把已修过的问题改回去。
