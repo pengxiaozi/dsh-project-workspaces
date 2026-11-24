@@ -109,8 +109,13 @@ window.__ModuleLoader__.load({
       '.sbw-now-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-brand-primary,#4d6bfe)}' +
       '.sbw-now-label{flex:none;font-size:12px;line-height:17px;color:var(--dsw-alias-brand-primary,#4d6bfe)}' +
       '.sbw-now-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:19px;color:var(--dsw-alias-label-primary);font-weight:500}' +
+      '.sbw-list.flat > :not(.sbw-flat){display:none}',
+      '.sbw-flat{display:flex;flex-direction:column}',
+      '.sbw-flat-row{gap:8px}',
+      '.sbw-ws-hint{flex:none;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-ibtn.on{background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 14%, transparent);color:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-cur{flex:none;font-size:11px;line-height:17px;padding:0 6px;border-radius:999px;color:var(--dsw-alias-brand-primary,#4d6bfe);background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 16%, transparent)}' +
-      '.sbw-sess.selected{position:relative;background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 20%, transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 30%, transparent)}',
+      '.sbw-sess.selected{position:relative;background-color:rgba(77,107,254,.18);background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 20%, transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 30%, transparent)}',
       '.sbw-sess.selected::before{content:"";position:absolute;top:6px;bottom:6px;left:5px;width:3px;border-radius:2px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-sess.selected .sbw-title{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:600}',
       '.sbw-sess.selected:hover{background-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 22%,transparent)}',
@@ -438,6 +443,7 @@ window.__ModuleLoader__.load({
       const [renamingSession, setRenamingSession] = useState('')
       const [sessionRenameValue, setSessionRenameValue] = useState('')
       const [lastPicked, setLastPicked] = useState('')
+      const [flatMode, setFlatMode] = useState(false)
       const [sessionRenameBusy, setSessionRenameBusy] = useState(false)
       const scrollRef = React.useRef(null)
       const sessionNodes = React.useRef({})
@@ -1493,6 +1499,27 @@ window.__ModuleLoader__.load({
         rows.sort(function (a, b) { return a.rank - b.rank })
         return rows.slice(0, 8)
       })()
+      const wsTitleById = (function () {
+        const map = {}
+        wsItems.forEach(function (ws) {
+          if (ws && ws.workspaceId) map[String(ws.workspaceId)] = String(ws.title || baseName(ws.path) || '')
+        })
+        return map
+      })()
+      // 「所有会话」平铺视图：不按项目分组，按最近更新倒序，方便会话多时直接找
+      const flatRows = (function () {
+        const rows = []
+        Object.keys(summaries).forEach(function (id) {
+          const summary = summaries[id]
+          if (!summary) return
+          const label = sessionLabel(summary)
+          const hint = wsTitleById[String(summary.workspaceId || '')] || ''
+          if (needle && (label + ' ' + hint).toLowerCase().indexOf(needle) < 0) return
+          rows.push({ id: String(id), label: label, hint: hint, stamp: sessionStamp(summary) || 0, summary: summary })
+        })
+        rows.sort(function (a, b) { return b.stamp - a.stamp })
+        return rows
+      })()
       const allTags = (function () {
         const set = new Set()
         ;(projects || []).forEach(function (project) {
@@ -1681,7 +1708,7 @@ window.__ModuleLoader__.load({
       if (uiSettings.runningFg) uiVars['--sbw-run-fg'] = uiSettings.runningFg
       return h('div', { className: 'sbw sbw-wide', style: uiVars, ref: rootRef },
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
-          searchOpen ? null : h('span', { className: 'sbw-hd-label' }, '工作区'),
+          searchOpen ? null : h('span', { className: 'sbw-hd-label' }, flatMode ? ('所有会话 · ' + flatRows.length) : '工作区'),
           searchOpen || !headerSum ? null : h('span', { className: 'sbw-hd-sum', title: (headerSum.running ? headerSum.running + ' 个会话正在回答' : '') + (headerSum.pending ? (headerSum.running ? '，' : '') + headerSum.pending + ' 个等待你处理' : '') },
             headerSum.pending ? h('button', {
               className: 'sbw-roll-item sbw-roll-btn',
@@ -1725,6 +1752,13 @@ window.__ModuleLoader__.load({
             searchOpen
               ? h('button', { className: 'sbw-ibtn', title: '关闭搜索', onClick: function () { setQuery(''); setSearchOpen(false) } }, glyph('IconCloseOutlineRegular', 16, '✕'))
               : null,
+            searchOpen
+              ? null
+              : h('button', {
+                className: 'sbw-ibtn' + (flatMode ? ' on' : ''),
+                title: flatMode ? '回到项目视图' : '所有会话（平铺，按最近更新排序）',
+                onClick: function () { setFlatMode(!flatMode) },
+              }, flatMode ? glyph('IconFolderOpenRegular', 16, '▤') : glyph('IconFlatListOutlineRegular', 16, '≡')),
             searchOpen
               ? null
               : h('button', { className: 'sbw-ibtn', title: '新建临时会话', onClick: newTempSession }, glyph('IconClockOutlineRegular', 16, '◷')),
@@ -1776,7 +1810,30 @@ window.__ModuleLoader__.load({
           ? h('div', { className: 'sbw-debug' }, 'minH=' + debugFit.total + ' · limit=' + debugFit.limit + ' · top=' + debugFit.top + ' · viewport=' + ((typeof window !== 'undefined' && window.innerHeight) || 0))
           : null,
         h('div', { className: 'sbw-scroll', ref: scrollRef },
-          h('div', { className: 'sbw-list' },
+          h('div', { className: 'sbw-list' + (flatMode ? ' flat' : '') },
+            flatMode
+              ? h('div', { className: 'sbw-flat' },
+                flatRows.length
+                  ? flatRows.map(function (row) {
+                    const status = statusOf(row.id)
+                    const pending = Boolean(status && status.pendingInteraction)
+                    const running = Boolean(status && status.running && !status.pendingInteraction)
+                    const active = String(row.id) === String(currentId)
+                    return h('div', {
+                      key: 'flat:' + row.id,
+                      className: 'sbw-row sbw-sess sbw-flat-row' + (active ? ' selected' : '') + (running ? ' running' : ''),
+                      role: 'treeitem',
+                      title: row.hint ? row.label + ' · ' + row.hint : row.label,
+                      onClick: function () { openSession(row.id) },
+                      ref: function (node) { if (node) sessionNodes.current[String(row.id)] = node },
+                    },
+                      statusDot(pending ? 'warning' : (running ? 'ongoing' : (status && status.completionUnread ? 'done' : ''))),
+                      h('span', { className: 'sbw-title' }, row.label),
+                      row.hint ? h('span', { className: 'sbw-ws-hint' }, row.hint) : null,
+                      h('span', { className: 'sbw-time' }, formatRelative(row.stamp)))
+                  })
+                  : h('div', { className: 'sbw-empty' }, needle ? '没有匹配的会话' : '还没有会话'))
+              : null,
             !loaded ? h('div', { className: 'sbw-skel' }, [0, 1, 2, 3].map(function (index) {
               return h('div', { key: index, className: 'sbw-skel-row' },
                 h('span', { className: 'sbw-skel-ico' }),
