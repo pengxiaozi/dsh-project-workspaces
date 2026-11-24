@@ -1393,8 +1393,8 @@ window.__ModuleLoader__.load({
         )
       }
       function shortPath(target) {
-        const norm = normalizePath(target)
-        const parts = norm.split('/').filter(function (x) { return x })
+        // 注意：真实 Windows 路径是反斜杠，必须两种分隔符都切，否则整条路径会原样显示
+        const parts = String(target || '').replace(/\\/g, '/').split('/').filter(function (x) { return x })
         if (parts.length <= 2) return String(target || '')
         return '…/' + parts.slice(-2).join('/')
       }
@@ -2209,7 +2209,7 @@ window.__ModuleLoader__.load({
       '.sbw-card-path{flex:0 1 auto;min-width:0;padding:0;font-size:11px;line-height:15px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.sbw-card-body{padding:0 4px 4px}',
       '.sbw-card-subs{display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px 17px}',
-      '.sbw-chip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;cursor:pointer;max-width:100%}',
+      '.sbw-chip{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 6px;border:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:11px;line-height:1;cursor:pointer;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.sbw-chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.sbw-chip .sbw-dot{width:5px;height:5px;margin:0}',
       '.sbw-chip-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
