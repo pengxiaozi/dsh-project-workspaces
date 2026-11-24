@@ -53,6 +53,7 @@ window.__ModuleLoader__.load({
       '.sbw-search.open{height:32px;padding:0 4px 0 0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}',
       '.sbw-search input{flex:1;width:0;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}',
       '.sbw-search input::placeholder{color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-debug{flex:none;padding:2px 12px 4px;font-size:10px;line-height:14px;color:var(--dsw-alias-label-tertiary);border-top:0.5px dashed var(--dsw-alias-border-l2,rgba(127,127,127,.2))}' +
       '.sbw-scroll{flex:1;min-height:0;display:flex;flex-direction:column}',
       '.sbw-wide .sbw-scroll{display:block;flex:1 1 auto;min-height:0;max-height:none;-webkit-overflow-scrolling:touch;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
       '.sbw-wide .sbw-scroll{touch-action:pan-y}',
@@ -1459,6 +1460,11 @@ window.__ModuleLoader__.load({
       const tempVisible = looseVisible.filter(isTempWs)
       const otherLoose = looseVisible.filter(function (ws) { return !isTempWs(ws) })
       const empty = !hasProjects && !looseVisible.length && !(legacy.length && !tree)
+      // 排查用：localStorage.setItem('DSH_PW_DEBUG','1') 后刷新，侧边栏底部会显示测得的高度
+      const debugFit = React.useRef({ total: 0, limit: 0, top: 0 }).current
+      const showDebug = (function () {
+        try { return window.localStorage && window.localStorage.getItem('DSH_PW_DEBUG') === '1' } catch (err) { return false }
+      })()
       const rootRef = React.useRef(null)
       // 兜底：不管祖先有没有给出确定高度，都按视口算一次列表可用高度，保证能滚动
       useEffect(function () {
@@ -1466,35 +1472,39 @@ window.__ModuleLoader__.load({
           const box = scrollRef.current
           const root = rootRef.current
           if (!box || !root) return
-          if (typeof box.getBoundingClientRect !== 'function') return
           if (typeof root.getBoundingClientRect !== 'function') return
           const rect = root.getBoundingClientRect()
           if (!rect || typeof rect.top !== 'number') return
           const viewport = (typeof window !== 'undefined' && window.innerHeight) || 0
-          // 关键：找最近的「容器查询容器」（侧边栏把工作区区域包在 container-type:size 里，
-          // 它本身是 flex:1 + min-height:0，高度确定）。不能用 .regionArea 之类的祖先：
-          // 它的行高是 max-content，由我们的内容撑开，拿它当底边会形成循环，永远填不满。
+          if (!viewport) return
+          // 找最近的「自己有确定高度、并且会滚动」的祖先（原生侧边栏是 .scrollArea：
+          // flex:1 + min-height:0 + overflow-y:auto）。它的高度不由我们的内容决定，
+          // 拿它的底边当可用区域才不会循环。
           let limit = viewport
           let el = root
           for (let i = 0; i < 8 && el; i += 1) {
             const parent = el.parentElement
             if (!parent) break
-            let containerType = ''
-            try {
-              containerType = window.getComputedStyle(parent).containerType || ''
-            } catch (err) {
-              containerType = ''
-            }
             const parentRect = parent.getBoundingClientRect()
-            if (String(containerType).indexOf('size') >= 0 && parentRect && parentRect.height > 0) {
-              limit = Math.min(limit, parentRect.bottom)
+            let overflowY = ''
+            try {
+              const style = window.getComputedStyle(parent)
+              overflowY = style.getPropertyValue('overflow-y') || style.overflowY || ''
+            } catch (err) {
+              overflowY = ''
+            }
+            const scrolls = overflowY === 'auto' || overflowY === 'scroll'
+            if (scrolls && parentRect && parentRect.height > 0) {
+              limit = Math.min(viewport, parentRect.bottom)
               break
             }
             el = parent
           }
-          if (!viewport) return
-          const total = Math.max(160, Math.round(limit - rect.top - 6))
+          const total = Math.max(160, Math.round(limit - rect.top - 4))
           if (total > 0 && root.style.minHeight !== total + 'px') root.style.minHeight = total + 'px'
+          debugFit.total = total
+          debugFit.limit = Math.round(limit)
+          debugFit.top = Math.round(rect.top)
         }
         fit()
         const timer = setTimeout(fit, 60)
@@ -1599,6 +1609,9 @@ window.__ModuleLoader__.load({
         tagFilter
           ? h('div', { className: 'sbw-filter-hint' }, '只看「' + tagFilter + '」：' + taggedProjects.length + ' / ' + (projects || []).length + ' 个项目',
             h('button', { className: 'sbw-filter-clear', onClick: function () { setTagFilter('') } }, '显示全部'))
+          : null,
+        showDebug
+          ? h('div', { className: 'sbw-debug' }, 'minH=' + debugFit.total + ' · limit=' + debugFit.limit + ' · top=' + debugFit.top + ' · viewport=' + ((typeof window !== 'undefined' && window.innerHeight) || 0))
           : null,
         h('div', { className: 'sbw-scroll', ref: scrollRef },
           h('div', { className: 'sbw-list' },
