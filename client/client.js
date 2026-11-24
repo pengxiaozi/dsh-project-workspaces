@@ -35,10 +35,11 @@ window.__ModuleLoader__.load({
     }
     // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
     const SIDEBAR_CSS = [
-      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:none;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
+      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
       // 照抄原生 WorkspaceBrowser：侧边栏把工作区区域包在 container-type:size 里，
       // 用 100cqh 取「这块区域的一屏高」，不依赖祖先有没有确定高度。
-      '.sbw-wide{flex:none;min-height:0;max-height:100cqh}',
+      '.sbw-region{display:flex;flex-direction:column;min-height:0;height:100%}',
+      '.sbw-wide{flex:1 1 auto;min-height:0;max-height:none}',
       '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);overflow:hidden;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
       '.sbw-hd-label{font-weight:500;letter-spacing:.02em}',
@@ -1468,6 +1469,56 @@ window.__ModuleLoader__.load({
       const rootRef = React.useRef(null)
       // 兜底：不管祖先有没有给出确定高度，都按视口算一次列表可用高度，保证能滚动
       useEffect(function () {
+        // 关键：原生侧边栏里装工作区的那块区域，高度是 grid 的 max-content 行 ——
+        // 由内容撑开。所以「填满」不能只靠量高度（会循环），得把这一行的行高改成 1fr，
+        // 让它去吃剩下的空间；下面的 footer 插件（设置、其他入口）在另一块区域，不受影响。
+        const undo = []
+        function adaptLayout() {
+          const rootEl = rootRef.current
+          if (!rootEl) return
+          let el = rootEl
+          let grid = null
+          let region = null
+          for (let i = 0; i < 6 && el && el.parentElement; i += 1) {
+            const parent = el.parentElement
+            let display = ''
+            try {
+              display = window.getComputedStyle(parent).display
+            } catch (err) {
+              display = ''
+            }
+            if (display === 'grid') {
+              grid = parent
+              region = el
+              break
+            }
+            el = parent
+          }
+          if (!grid || !region || region.dataset.pwRegion === '1') return
+          try {
+            const style = window.getComputedStyle(grid)
+            // 注意：computed 的 grid-template-rows 已经把 max-content 解析成像素了，
+            // 所以要「把最后一行改成 1fr」，只能用解析后的像素列表替换最后一项。
+            const rows = String(style.gridTemplateRows || '').trim().split(/\s+/).filter(Boolean)
+            if (!rows.length) return
+            // 我们的面板必须是这一格里的最后一个子元素，才敢把最后一行改成 1fr；
+            // 否则下面还挂着别的插件，改成 1fr 会把它们挤掉。
+            if (grid.lastElementChild !== region) return
+            const next = rows.slice()
+            next[next.length - 1] = '1fr'
+            const previous = grid.style.gridTemplateRows
+            grid.style.gridTemplateRows = next.join(' ')
+            region.dataset.pwRegion = '1'
+            region.classList.add('sbw-region')
+            undo.push(function () {
+              grid.style.gridTemplateRows = previous
+              try { delete region.dataset.pwRegion } catch (err) { region.removeAttribute('data-pw-region') }
+              region.classList.remove('sbw-region')
+            })
+          } catch (err) {
+            // 拿不到布局信息就退回下面的量高兜底
+          }
+        }
         function fit() {
           const box = scrollRef.current
           const root = rootRef.current
@@ -1500,14 +1551,22 @@ window.__ModuleLoader__.load({
             }
             el = parent
           }
+          if (root.dataset && root.parentElement && root.parentElement.classList.contains('sbw-region')) {
+            if (root.style.minHeight) root.style.minHeight = ''
+            debugFit.total = 0
+            debugFit.limit = Math.round(limit)
+            debugFit.top = Math.round(rect.top)
+            return
+          }
           const total = Math.max(160, Math.round(limit - rect.top - 4))
           if (total > 0 && root.style.minHeight !== total + 'px') root.style.minHeight = total + 'px'
           debugFit.total = total
           debugFit.limit = Math.round(limit)
           debugFit.top = Math.round(rect.top)
         }
+        adaptLayout()
         fit()
-        const timer = setTimeout(fit, 60)
+        const timer = setTimeout(function () { adaptLayout(); fit() }, 60)
         window.addEventListener('resize', fit)
         let observer = null
         if (typeof ResizeObserver === 'function' && rootRef.current) {
@@ -1518,6 +1577,10 @@ window.__ModuleLoader__.load({
           clearTimeout(timer)
           window.removeEventListener('resize', fit)
           if (observer) observer.disconnect()
+          while (undo.length) {
+            const restore = undo.pop()
+            try { restore() } catch (err) { /* 忽略 */ }
+          }
         }
       }, [loaded, searchOpen, tagFilter, Boolean(tree), activeTabs.length])
 
