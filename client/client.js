@@ -1551,6 +1551,12 @@ window.__ModuleLoader__.load({
             h('span', { className: 'sbw-card-dir-name', style: CARD_STYLE.dirName }, label),
             state ? statusDot(state) : null,
             h('span', { style: CARD_STYLE.dirCount, title: hasKids ? '该目录下的工作区数量' : '该目录的会话数量' }, hasKids ? String(cardTreeCount(node)) : String(cardTreeSessionIds(node).length)),
+            node.item ? h('button', {
+              className: 'sbw-mini',
+              style: { flex: 'none', width: '20px', height: '20px', marginLeft: '2px' },
+              title: '改「' + label + '」的别名 / 标签',
+              onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: node.item.child.path }) },
+            }, glyph('IconEditOutlineRegular', 13, '✎')) : null,
             h('button', {
               className: 'sbw-mini sbw-card-add',
               style: { flex: 'none', width: '20px', height: '20px', marginLeft: '2px' },
