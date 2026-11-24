@@ -39,9 +39,12 @@ window.__ModuleLoader__.load({
       // 照抄原生 WorkspaceBrowser：侧边栏把工作区区域包在 container-type:size 里，
       // 用 100cqh 取「这块区域的一屏高」，不依赖祖先有没有确定高度。
 
-      '.sbw-region{display:flex;flex-direction:column;min-height:0;min-width:0}',
-      '.sbw-region > .sbw{flex:1 1 auto;min-height:0;overflow:hidden}',
-      '.sbw-wide{flex:1 1 auto;min-height:0;max-height:none}',
+      '.sbw-region{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}',
+      '.sbw-region > .sbw{flex:1 1 auto;min-height:0;height:100%;max-height:100%;overflow:hidden}',
+      '.sbw-region > .sbw > .sbw-scroll{flex:1 1 auto;min-height:0;overflow-x:hidden;overflow-y:auto}',
+      // 双保险：即使 grid 那一行没被改成 1fr（例如原生结构变了），也按原生做法
+      // 用 100cqh 把面板封顶到「这块区域的一屏高」，列表内部照样能滚。
+      '.sbw-wide{flex:1 1 auto;min-height:0;max-height:100cqh}',
       '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
       '.sbw-hd-label{font-weight:500;letter-spacing:.02em}',
