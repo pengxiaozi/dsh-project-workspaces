@@ -453,6 +453,16 @@ window.__ModuleLoader__.load({
       const [sessionRenameBusy, setSessionRenameBusy] = useState(false)
       const scrollRef = React.useRef(null)
       const sessionNodes = React.useRef({})
+      React.useEffect(function () {
+        function onOpened(event) {
+          const id = String((event && event.detail && event.detail.id) || '')
+          if (!id) return
+          setLastPicked(id)
+        }
+        window.addEventListener('dsh-project-workspaces:opened', onOpened)
+        return function () { window.removeEventListener('dsh-project-workspaces:opened', onOpened) }
+      }, [])
+
       async function commitRename(project) {
         const name = renameValue.trim()
         if (!project) { setRenaming(''); return }
@@ -634,7 +644,7 @@ window.__ModuleLoader__.load({
         (sessionSnap && (sessionSnap.activeSessionId || sessionSnap.currentSessionId || sessionSnap.selectedSessionId || sessionSnap.activeId || sessionSnap.selectedId || (sessionSnap.active && sessionSnap.active.id) || (sessionSnap.current && sessionSnap.current.id))) || ''
       )
       // 快照给不出「当前会话」时，用最近一次手动打开的会话兜底，保证始终有一行处于选中态
-      const currentId = activeSessionId || String(lastPicked || '')
+      const currentId = String(lastPicked || '') || activeSessionId
       const projects = Array.isArray(tree) ? mapProjects(tree, wsItems) : null
       // 落在项目根目录下、但还没写进项目里（老数据 / 后来手动加的工作区）→ 渲染时自动挂到该项目下面，
       // 免得同一条目录树被拆成「项目里一部分 + 下面平铺一部分」。
