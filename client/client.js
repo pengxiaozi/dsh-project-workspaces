@@ -109,6 +109,10 @@ window.__ModuleLoader__.load({
       '.sbw-empty{padding:8px 12px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) + var(--sbw-indent,0px));color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
       '.sbw-roll{margin-left:auto;flex:none;display:flex;align-items:center;gap:6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-roll-item{display:inline-flex;align-items:center;gap:3px}',
+      '.sbw-folder{position:relative}',
+      '.sbw-folder.act-ongoing::after{content:"";position:absolute;right:-3px;bottom:-1px;width:8px;height:8px;border-radius:50%;border:1.5px solid transparent;background:var(--dsw-alias-bg-base,#fff);border-top-color:var(--dsw-alias-state-business-primary,#4d6bfe);border-right-color:var(--dsw-alias-state-business-primary,#4d6bfe);animation:sbw-spin .9s linear infinite}',
+      '.sbw-folder.act-warning::after{content:"";position:absolute;right:-2px;bottom:0;width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-warn-primary,#c98a00);filter:drop-shadow(0 0 1.5px var(--dsw-alias-bg-base,#fff))}',
+      '.sbw-folder.act-done::after{content:"";position:absolute;right:-2px;bottom:0;width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-success-primary,#2ea043);filter:drop-shadow(0 0 1.5px var(--dsw-alias-bg-base,#fff))}',
       '.sbw-tabs{display:flex;gap:4px;overflow-x:auto;padding:2px 8px 6px 12px;scrollbar-width:none}',
       '.sbw-tabs::-webkit-scrollbar{display:none}',
       '.sbw-tab{flex:none;display:inline-flex;align-items:center;gap:5px;max-width:160px;height:24px;padding:0 8px;border:none;border-radius:999px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;cursor:pointer}',
@@ -806,8 +810,10 @@ window.__ModuleLoader__.load({
           onClick: options.onClick,
         }
         if (options.drag) Object.assign(shellProps, options.drag)
+        // 目录图标右下角的小徽标：正在回答 = 转圈，等待处理 = 琥珀点，未读完成 = 绿点
+        const actClass = options.activity ? ' act-' + options.activity : ''
         return h('div', shellProps,
-          h('span', { className: 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : ''), style: options.color ? { color: options.color } : undefined }, options.icon || FolderIcon({ open: options.open })),
+          h('span', { className: 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : '') + actClass, style: options.color ? { color: options.color } : undefined }, options.icon || FolderIcon({ open: options.open })),
           h('span', { className: 'sbw-slot sbw-chev' }, ChevronIcon({ open: options.open })),
           options.text,
           options.actions
@@ -1011,6 +1017,7 @@ window.__ModuleLoader__.load({
             className: 'sbw-row sbw-ws',
             title: ws.path,
             open: open,
+            activity: wsActivity(ws),
             style: { '--sbw-indent': (depth * 12) + 'px' },
             onClick: function () { toggleChild(key) },
             text: h('span', { className: 'sbw-text' },
@@ -1081,6 +1088,7 @@ window.__ModuleLoader__.load({
           className: 'sbw-row sbw-dir',
           title: node.path + ' · ' + countLeaves(node) + ' 个子工作区',
           open: open,
+          activity: nodeActivity(node),
           style: indent,
           onClick: function () { toggleChild(key) },
           text: h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title' }, node.name)),
@@ -1094,6 +1102,47 @@ window.__ModuleLoader__.load({
         return h('div', { key: key }, rows)
       }
       // 项目级状态汇总：把项目下所有工作区的会话按 running / 待处理 / 未读 归类
+      // 一组会话状态里最需要被看见的那个：等待处理 > 正在回答 > 未读完成
+      function rollupActivity(rollup) {
+        if (!rollup) return ''
+        if (rollup.pending) return 'warning'
+        if (rollup.running) return 'ongoing'
+        if (rollup.unread) return 'done'
+        return ''
+      }
+      function wsRollup(ws) {
+        let running = 0
+        let pending = 0
+        let unread = 0
+        if (ws) {
+          sessionIdsOf(ws).forEach(function (id) {
+            const status = statusOf(id)
+            if (!status) return
+            if (status.pendingInteraction) pending += 1
+            else if (status.running) running += 1
+            else if (status.completionUnread) unread += 1
+          })
+        }
+        return { running: running, pending: pending, unread: unread }
+      }
+      function wsActivity(ws) { return rollupActivity(wsRollup(ws)) }
+      // 合并目录节点：整棵子树里只要有在跑的会话，父目录图标也带徽标
+      function nodeActivity(node) {
+        if (node.item && node.item.ws) {
+          const own = wsRollup(node.item.ws)
+          if (own.pending) return 'warning'
+          if (own.running) return 'ongoing'
+          if (own.unread) return 'done'
+        }
+        let found = ''
+        for (const child of node.children.values()) {
+          const act = nodeActivity(child)
+          if (act === 'warning') return 'warning'
+          if (act === 'ongoing') found = found === 'done' ? 'ongoing' : (found || 'ongoing')
+          else if (act === 'done' && !found) found = 'done'
+        }
+        return found
+      }
       function projectRollup(project) {
         const ids = []
         const collect = function (ws) {
@@ -1153,6 +1202,7 @@ window.__ModuleLoader__.load({
               title: ws.path,
               open: open,
               color: project.color,
+              activity: wsActivity(ws),
               style: { '--sbw-indent': '0px' },
               drag: projectDragProps(project),
               onClick: function () { toggleRoot(project.id) },
@@ -1180,6 +1230,7 @@ window.__ModuleLoader__.load({
             title: project.path,
             open: open,
             color: project.color,
+            activity: rollupActivity(projectRollup(project)),
             drag: projectDragProps(project),
             onClick: function () { if (!isRenaming) toggleRoot(project.id) },
             text: isRenaming
