@@ -35,8 +35,10 @@ window.__ModuleLoader__.load({
     }
     // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
     const SIDEBAR_CSS = [
-      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
-      '.sbw-wide{flex:1 1 auto;min-height:0;max-height:100%}',
+      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:none;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
+      // 照抄原生 WorkspaceBrowser：侧边栏把工作区区域包在 container-type:size 里，
+      // 用 100cqh 取「这块区域的一屏高」，不依赖祖先有没有确定高度。
+      '.sbw-wide{flex:none;min-height:0;max-height:100cqh}',
       '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);overflow:hidden;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
       '.sbw-hd-label{font-weight:500;letter-spacing:.02em}',
@@ -1468,9 +1470,10 @@ window.__ModuleLoader__.load({
             el = parent
           }
           const bottomGap = 10
-          // 关键：把整个面板的高度钉死到「侧边栏区域还剩下的高度」。
-          // 只设滚动区 maxHeight 的话，面板本身仍按内容撑开：项目少的时候下面会留一大块空白，
-          // 项目多的时候滚动区又被父级裁掉，看着就是「高度不对」。
+          // 现代浏览器直接用 CSS 的 100cqh（见 .sbw-wide），这里只在容器查询不可用时兜底。
+          const supportsCqh = typeof CSS !== 'undefined' && CSS && typeof CSS.supports === 'function'
+            && (CSS.supports('max-height', '100cqh') || CSS.supports('height', '100cqh'))
+          if (supportsCqh) return
           const root = rootRef.current
           if (root && typeof root.getBoundingClientRect === 'function') {
             const rootRect = root.getBoundingClientRect()
