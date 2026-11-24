@@ -1679,11 +1679,22 @@ window.__ModuleLoader__.load({
               tree
                 ? h('div', { className: 'sbw-card-tree', style: CARD_STYLE.tree }, (function () {
                   const rows = []
-                  const rootOnly = tree.item ? cardTreeSessionIds({ item: tree.item, children: new Map() }).length : 0
-                  if (tree.item && rootOnly) rows.push(cardDirRow(Object.assign({}, tree, { name: '根目录会话' }), 'cd:' + project.id + '/@root', 0, project))
                   for (const entry of tree.children) rows.push(cardDirRow(entry[1], 'cd:' + project.id + '/' + entry[0], 0, project))
                   return rows
                 })())
+                : null,
+              project.selfWs && (function () {
+                const ids = sessionIdsOf(project.selfWs).map(function (id) { return summaries[id] }).filter(Boolean)
+                return ids.length
+              })()
+                ? h(React.Fragment, null,
+                  h('div', { className: 'sbw-card-subhead' }, '根目录直接开的会话 · ' + sessionIdsOf(project.selfWs).length),
+                  h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, (function () {
+                    const ids = sessionIdsOf(project.selfWs).map(function (id) { return summaries[id] }).filter(Boolean)
+                    ids.sort(function (a, b) { return sessionStamp(b) - sessionStamp(a) })
+                    return ids.slice(0, 4).map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':root:' + item.id, false) })
+                  })())
+                )
                 : null,
               shown.length
                 ? h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id, subs.length + (project.selfWs ? 1 : 0) > 1) }))
@@ -2360,6 +2371,7 @@ window.__ModuleLoader__.load({
       '.sbw-card-sess{height:30px;border-radius:var(--dsw-radius-sm,8px)}',
       '.sbw-card-sess .sbw-title{font-size:13.5px}',
       '.sbw-card-sess .sbw-time{font-size:11px}',
+      '.sbw-card-subhead{margin:6px 0 2px;padding-left:2px;font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
       '.sbw-card-more{display:flex;align-items:center;gap:4px;width:100%;height:26px;margin-top:2px;padding:0 8px 0 20px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11.5px;cursor:pointer;border-radius:var(--dsw-radius-sm,8px)}',
       '.sbw-card-more:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.sbw-card-empty{padding:6px 8px 8px 20px;font-size:11.5px;color:var(--dsw-alias-label-tertiary)}',
