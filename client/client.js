@@ -35,12 +35,12 @@ window.__ModuleLoader__.load({
     }
     // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
     const SIDEBAR_CSS = [
-      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
+      '.sbw{--sbw-toolbar-height:36px;position:relative;z-index:1;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
       // 照抄原生 WorkspaceBrowser：侧边栏把工作区区域包在 container-type:size 里，
       // 用 100cqh 取「这块区域的一屏高」，不依赖祖先有没有确定高度。
       '.sbw-region{display:flex;flex-direction:column;min-height:0;height:100%}',
       '.sbw-wide{flex:1 1 auto;min-height:0;max-height:none}',
-      '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);overflow:hidden;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
       '.sbw-hd-label{font-weight:500;letter-spacing:.02em}',
       '.sbw-hd-label{position:relative;left:-1px;flex:none;max-width:45%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:20px;font-size:12px;color:var(--dsw-alias-label-tertiary)}',
@@ -1382,6 +1382,25 @@ window.__ModuleLoader__.load({
         )
       }
       // 标题栏总览：全站在跑 / 待处理的会话数，收起侧边栏前也能一眼看到
+      function firstStatusId(kind) {
+        const map = statusMap
+        if (!map) return ''
+        const ids = []
+        const visit = function (status, key) {
+          if (!status) return
+          const pending = status.pendingInteraction
+          const running = Boolean(status.running) && !pending
+          const hit = kind === 'pending' ? pending : running
+          if (hit) ids.push(String(key))
+        }
+        try {
+          if (typeof map.forEach === 'function') map.forEach(visit)
+          else Object.keys(map).forEach(function (key) { visit(map[key], key) })
+        } catch (err) {
+          return ''
+        }
+        return ids[0] || ''
+      }
       const headerSum = (function () {
         if (!statusMap) return null
         const runningIds = []
@@ -1501,11 +1520,27 @@ window.__ModuleLoader__.load({
             // 所以要「把最后一行改成 1fr」，只能用解析后的像素列表替换最后一项。
             const rows = String(style.gridTemplateRows || '').trim().split(/\s+/).filter(Boolean)
             if (!rows.length) return
-            // 我们的面板必须是这一格里的最后一个子元素，才敢把最后一行改成 1fr；
-            // 否则下面还挂着别的插件，改成 1fr 会把它们挤掉。
+            // 我们的面板必须是这一格里的最后一个子元素，才敢动行高；
+            // 否则下面还挂着别的插件，改了会把它们挤掉。
             if (grid.lastElementChild !== region) return
+            // 用几何位置判断我们在第几行：把每行的起点累加，找包住 region 顶部的那一行。
+            // （不能盲信「最后一行」——有些布局后面还有空行/隐藏行。）
+            const gridRect = grid.getBoundingClientRect()
+            const regionRect = region.getBoundingClientRect()
+            const gap = parseFloat(style.rowGap) || 0
+            let cursor = gridRect.top + (parseFloat(style.paddingTop) || 0) - (grid.scrollTop || 0)
+            let rowIndex = -1
+            for (let i = 0; i < rows.length; i += 1) {
+              const height = parseFloat(rows[i]) || 0
+              if (regionRect.top >= cursor - 1 && regionRect.top < cursor + height + gap + 1) {
+                rowIndex = i
+                break
+              }
+              cursor += height + gap
+            }
+            if (rowIndex < 0) rowIndex = rows.length - 1
             const next = rows.slice()
-            next[next.length - 1] = '1fr'
+            next[rowIndex] = '1fr'
             const previous = grid.style.gridTemplateRows
             grid.style.gridTemplateRows = next.join(' ')
             region.dataset.pwRegion = '1'
@@ -1595,12 +1630,20 @@ window.__ModuleLoader__.load({
             headerSum.pending ? h('button', {
               className: 'sbw-roll-item sbw-roll-btn',
               title: headerSum.pending + ' 个会话等待你处理（点一下打开）',
-              onClick: function (event) { event.stopPropagation(); if (headerSum.pendingIds.length) openSession(headerSum.pendingIds[0]) },
+              onClick: function (event) {
+                event.stopPropagation()
+                const id = headerSum.pendingIds[0] || firstStatusId('pending')
+                if (id) openSession(id)
+              },
             }, statusDot('warning'), String(headerSum.pending)) : null,
             headerSum.running ? h('button', {
               className: 'sbw-roll-item sbw-roll-btn',
               title: headerSum.running + ' 个会话正在回答（点一下打开）',
-              onClick: function (event) { event.stopPropagation(); if (headerSum.runningIds.length) openSession(headerSum.runningIds[0]) },
+              onClick: function (event) {
+                event.stopPropagation()
+                const id = headerSum.runningIds[0] || firstStatusId('running')
+                if (id) openSession(id)
+              },
             }, statusDot('ongoing'), String(headerSum.running)) : null
           ),
           searchOpen
