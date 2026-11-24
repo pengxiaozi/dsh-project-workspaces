@@ -110,6 +110,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 
 - **会话完成提示**：侧边栏订阅槽位给的 `useSessionStatus`（它的快照是 `ReadonlyMap<SessionId, { running, pendingInteraction, completionUnread }>`），当某个会话**从「正在回答」变成空闲**（或 `completionUnread` 由 false 变 true）时右上角浮出提示条（`已完成`，绿色对勾）；`pendingInteraction` 出现时浮出橙色提示（`等待你处理`）。提示条 10 秒自动消失，鼠标悬停时不消失，点击直接打开该会话，同一会话只保留最新一条
 - **会话重命名**：会话行 hover 出 `✎`，就地变成输入框，回车保存 / Esc 取消；走原生 `SessionFace.rename`（`sessions.using(id, { source: 'workspaceOperation' }, ref => ref.binding.session.rename(title))`），成功后侧边栏与原生列表同步更新
+- **深层子目录平铺**：相对项目根目录超过两层的子工作区（如 `trunk/public/other/xxx`）不再层层嵌套成空目录，直接在项目下平铺一行
 - **同父目录自动合并**：子工作区按相对项目根的路径分段聚成树，`public/web`、`public/page` 只出现一个 `public` 节点（右侧显示子工作区数量）
 - **会话折叠**：单个工作区最多铺 6 行会话，多出来折成「还有 N 个会话」（展开后可「收起会话」），搜索命中时不受折叠限制
 - 不属于任何项目的 Workspace **平铺在项目之后**（上方一条分隔线），不用分组标题；点开照样能看会话、新建会话

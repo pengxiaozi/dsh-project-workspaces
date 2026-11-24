@@ -1217,6 +1217,15 @@ window.__ModuleLoader__.load({
         const root = { name: project.root, path: project.path, children: new Map(), item: null }
         for (const item of project.children) {
           const segs = relSegments(project.path, item.child.path)
+          // 只合并「同一个父目录下」的兄弟子工作区（相对路径两层，如 public/web、public/page）；
+          // 更深的工作区（trunk/public/other/xxx）说明它本来就属于另一个应用目录，
+          // 一路嵌套下去会变成一长串空目录，直接平铺成一行更清楚。
+          if (segs.length > 2) {
+            const key = item.child.name
+            if (!root.children.has(key)) root.children.set(key, { name: key, path: item.child.path, children: new Map(), item: null })
+            root.children.get(key).item = item
+            continue
+          }
           const parts = segs.length ? segs : [item.child.name]
           let node = root
           let acc = String(project.path || '').replace(/[\\/]+$/, '')
@@ -1272,12 +1281,14 @@ window.__ModuleLoader__.load({
           actions: h('span', { className: 'sbw-count' }, String(countLeaves(node)))
         }))
         if (!open) return h('div', { key: key }, rows)
-        return h('div', { key: key, className: 'sbw-branch', style: { '--sbw-guide': (depth * 14 + 20) + 'px' } }, rows)
         for (const entry of Array.from(node.children.entries()).sort(function (a, b) { return a[0].localeCompare(b[0]) })) {
-          rows.push(dirNode(entry[1], key + '/' + entry[0], depth + 1, project))
+          const child = dirNode(entry[1], key + '/' + entry[0], depth + 1, project)
+          if (child) rows.push(child)
         }
-        if (node.item && node.item.ws) rows.push(workspaceNode(node.item.ws, '本目录', key + '/__self__', depth + 1, { projectId: project && project.id, child: node.item.child }))
-        return h('div', { key: key }, rows)
+        if (node.item && node.item.ws) {
+          rows.push(workspaceNode(node.item.ws, '本目录', key + '/__self__', depth + 1, { projectId: project && project.id, child: node.item.child }))
+        }
+        return h('div', { key: key, className: 'sbw-branch', style: { '--sbw-guide': (depth * 14 + 20) + 'px' } }, rows)
       }
       // 项目级状态汇总：把项目下所有工作区的会话按 running / 待处理 / 未读 归类
       // 一组会话状态里最需要被看见的那个：等待处理 > 正在回答 > 未读完成
