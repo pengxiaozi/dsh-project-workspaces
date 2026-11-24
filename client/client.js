@@ -1978,8 +1978,9 @@ window.__ModuleLoader__.load({
         walk(node)
         return out
       }
-      function toggleNode(node) {
-        const rels = subtreeRels(node)
+      function toggleNode(node, deep) {
+        // 默认只勾这一个目录；按住 Alt/Ctrl/Shift 点才连子目录一起勾
+        const rels = deep ? subtreeRels(node) : [node.rel]
         const all = rels.every(function (rel) { return !!picked[rel] })
         setPicked(function (prev) {
           const next = Object.assign({}, prev)
@@ -2065,20 +2066,24 @@ window.__ModuleLoader__.load({
       function renderNodes(nodes, level) {
         return (nodes || []).map(function (node) {
           const rels = subtreeRels(node)
-          const allPicked = rels.every(function (rel) { return !!picked[rel] })
-          const somePicked = !allPicked && rels.some(function (rel) { return !!picked[rel] })
+          const selfPicked = !!picked[node.rel]
+          const descPicked = rels.slice(1).some(function (rel) { return !!picked[rel] })
           const hasKids = node.children && node.children.length > 0
-          const isCollapsed = !!collapsed[node.rel]
+          // 第二层及更深默认收起，避免一次把整棵树铺开
+          const isCollapsed = collapsed[node.rel] === undefined ? level >= 1 : !!collapsed[node.rel]
           let rows = [h('div', { className: 'pw-tree-row', key: node.rel, style: { paddingLeft: (6 + level * 14) + 'px' } },
             hasKids
               ? h('button', { className: 'pw-tree-tri', title: isCollapsed ? '展开' : '收起', onClick: function () { toggleExpand(node.rel) } }, isCollapsed ? '▸' : '▾')
               : h('span', { className: 'pw-tree-tri pw-tree-leaf' }, '·'),
             h('input', {
               type: 'checkbox',
-              className: somePicked ? 'pw-cb-partial' : '',
-              checked: allPicked,
+              className: !selfPicked && descPicked ? 'pw-cb-partial' : '',
+              checked: selfPicked,
               disabled: busy,
-              onChange: function () { toggleNode(node) },
+              onChange: function (event) {
+                const deep = Boolean(event && (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey))
+                toggleNode(node, deep)
+              },
             }),
             h('span', { className: 'pw-tree-name', onClick: function () { if (hasKids) toggleExpand(node.rel) } }, node.name),
             node.registered ? h('span', { className: 'pw-tag' }, '已注册·复用') : null,
@@ -2165,7 +2170,7 @@ window.__ModuleLoader__.load({
                       h('button', { className: 'pw-link', disabled: busy, onClick: function () { setPicked({}) } }, '清空'),
                       skipped.length ? h('span', { className: 'pw-muted' }, '已忽略 ' + skipped.length + ' 个依赖/构建目录') : null
                     ),
-                    h('div', { className: 'pw-muted' }, '勾中的每个目录 = 一个独立工作区（会话 cwd 就是它）；同一父目录下的会自动合并成一个目录节点。')
+                    h('div', { className: 'pw-muted' }, '勾中的每个目录 = 一个独立工作区（会话 cwd 就是它）；默认只勾当前这一层，按住 Alt / Ctrl 点方框才会连子目录一起勾。')
                   )
                   : h('div', { className: 'pw-msg' }, '该目录下没有子目录')
             ),
