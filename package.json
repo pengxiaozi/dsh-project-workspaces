@@ -1,6 +1,6 @@
 {
   "name": "dsh-project-workspaces",
-  "version": "0.1.54",
+  "version": "0.1.55",
   "description": "DSH 项目工作区插件：项目 → 子工作区 → 会话的层级侧边栏，替换原生工作区栏，支持别名/标签/置顶/拖拽排序/会话导出/完成提示。",
   "type": "module",
   "main": "lib/index.js",

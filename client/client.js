@@ -1530,7 +1530,7 @@ window.__ModuleLoader__.load({
 
       function cardDirRow(node, key, level, project) {
         const hasKids = node.children.size > 0
-        const open = cardDirs[key] === true
+        const open = cardDirs[key] === undefined ? level === 0 : cardDirs[key] === true
         const label = displayName(node.name, node.item && node.item.child ? node.item.child.alias : '')
         const state = node.item && node.item.ws ? wsActivity(node.item.ws) : null
         const rows = [
@@ -1679,7 +1679,8 @@ window.__ModuleLoader__.load({
               tree
                 ? h('div', { className: 'sbw-card-tree', style: CARD_STYLE.tree }, (function () {
                   const rows = []
-                  if (tree.item) rows.push(cardDirRow(tree, 'cd:' + project.id + '/@root', 0, project))
+                  const rootOnly = tree.item ? cardTreeSessionIds({ item: tree.item, children: new Map() }).length : 0
+                  if (tree.item && rootOnly) rows.push(cardDirRow(Object.assign({}, tree, { name: '根目录会话' }), 'cd:' + project.id + '/@root', 0, project))
                   for (const entry of tree.children) rows.push(cardDirRow(entry[1], 'cd:' + project.id + '/' + entry[0], 0, project))
                   return rows
                 })())
