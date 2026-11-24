@@ -3026,15 +3026,9 @@ window.__ModuleLoader__.load({
         const [inlineFallback, setInlineFallback] = useState(false)
         const probeRef = React.useRef(null)
         const listRef = React.useRef(null)
-        useEffect(function () {
-          if (!activeId) return
-          setOrder(function (prev) {
-            if (prev[0] === activeId) return prev
-            const next = [activeId].concat(prev.filter(function (id) { return id !== activeId })).slice(0, MAX_TABS)
-            writeTabs(next)
-            return next
-          })
-        }, [activeId])
+        const tabRefs = React.useRef({})
+        // 点击标签后保持它原来的位置，不再自动挪到最前面
+
         // 让标题栏让出 38px，再把标签条贴到它正上方（先推再量，避免量到旧位置）
         useEffect(function () {
           let headerEl = null
@@ -3135,7 +3129,14 @@ window.__ModuleLoader__.load({
           seen[key] = true
           merged.push(key)
         })
+        const highlightId = activeId || ''
         const list = merged.slice(0, MAX_TABS)
+        useEffect(function () {
+          if (!highlightId) return
+          const node = tabRefs.current[highlightId]
+          if (!node || typeof node.scrollIntoView !== 'function') return
+          try { node.scrollIntoView({ block: 'nearest', inline: 'nearest' }) } catch (err) { void err }
+        }, [highlightId, list.length])
         if (!list.length) return h('span', { ref: probeRef, className: 'pwt-probe' })
         if (!activeId && list.length) { /* 没有明确当前会话时不高亮 */ }
         const style = box
@@ -3158,7 +3159,7 @@ window.__ModuleLoader__.load({
                 },
               },
                 list.map(function (id) {
-                  return h('div', { key: 'tab:' + id, className: 'pwt-tab' + (id === activeId ? ' on' : ''), role: 'tab', title: sessionLabel(summaries[id]) },
+                  return h('div', { key: 'tab:' + id, ref: function (node) { if (node) tabRefs.current[id] = node }, className: 'pwt-tab' + (highlightId && id === highlightId ? ' on' : ''), role: 'tab', title: sessionLabel(summaries[id]) },
                     h('button', {
                       className: 'pwt-hit',
                       onClick: function (e) {
