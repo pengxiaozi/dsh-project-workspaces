@@ -35,10 +35,12 @@ window.__ModuleLoader__.load({
     }
     // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
     const SIDEBAR_CSS = [
-      '.sbw{--sbw-toolbar-height:36px;position:relative;z-index:1;flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
+      '.sbw{--sbw-toolbar-height:36px;position:relative;z-index:1;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
       // 照抄原生 WorkspaceBrowser：侧边栏把工作区区域包在 container-type:size 里，
       // 用 100cqh 取「这块区域的一屏高」，不依赖祖先有没有确定高度。
       '.sbw-region{display:flex;flex-direction:column;min-height:0;height:100%}',
+      '.sbw-region > .sbw{overflow:hidden}',
+
       '.sbw-wide{flex:1 1 auto;min-height:0;max-height:none}',
       '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
@@ -1604,7 +1606,11 @@ window.__ModuleLoader__.load({
             return
           }
           const total = Math.max(160, Math.round(limit - rect.top - 4))
-          if (total > 0 && root.style.minHeight !== total + 'px') root.style.minHeight = total + 'px'
+          if (total > 0) {
+            if (root.style.minHeight) root.style.minHeight = ''
+            if (root.style.maxHeight !== total + 'px') root.style.maxHeight = total + 'px'
+            if (root.style.overflow !== 'hidden') root.style.overflow = 'hidden'
+          }
           debugFit.total = total
           debugFit.limit = Math.round(limit)
           debugFit.top = Math.round(rect.top)
