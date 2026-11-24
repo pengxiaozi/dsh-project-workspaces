@@ -1873,9 +1873,24 @@ window.__ModuleLoader__.load({
         next[next.length - 1] = 'minmax(0, 1fr)'
         grid.style.gridTemplateRows = next.join(' ')
         try { region.classList.add('sbw-region') } catch (err) { void err }
+        let reverted = false
+        // 内容不足一屏时撤销 1fr：让这一行仍然按内容高度，页面其余部分（页脚插件等）
+        // 保持原生布局，也不会留下「撑满但空着」的区域。只有内容确实超出时才让它填满。
+        const check = setTimeout(function () {
+          const list = root.querySelector ? root.querySelector('.sbw-scroll') : null
+          if (!list) return
+          if (list.scrollHeight <= list.clientHeight + 4) {
+            reverted = true
+            grid.style.gridTemplateRows = previous
+            try { region.classList.remove('sbw-region') } catch (err) { void err }
+          }
+        }, 0)
         return function () {
-          grid.style.gridTemplateRows = previous
-          try { region.classList.remove('sbw-region') } catch (err) { void err }
+          clearTimeout(check)
+          if (!reverted) {
+            grid.style.gridTemplateRows = previous
+            try { region.classList.remove('sbw-region') } catch (err) { void err }
+          }
         }
       }, [loaded, searchOpen, tagFilter, Boolean(tree), activeTabs.length])
 
