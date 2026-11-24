@@ -1453,7 +1453,7 @@ window.__ModuleLoader__.load({
                 h('button', { className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''), title: project.pinned ? '取消置顶' : '置顶项目', onClick: function (e) { e.stopPropagation(); togglePin(project) } }, glyph('IconPinOutlineRegular', 14, '📌')),
                 h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
                 h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
-                h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path, name: project.root }) } }, glyph('IconPlusOutlineRegular', 14, '＋')),
+                h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path || project.root, name: project.name || '' }) } }, glyph('IconPlusOutlineRegular', 14, '＋')),
                 h('button', { className: 'sbw-mini', title: '导出该项目的全部会话', onClick: function (e) { e.stopPropagation(); exportSessions(project.children.map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : []), project.name || project.root) } }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
                 h('button', { className: 'sbw-mini sbw-danger', title: '移除项目（不删除工作区）', onClick: function (e) { e.stopPropagation(); removeProjectItem(project) } }, glyph('IconTrashOutlineRegular', 14, '删'))
               ),
