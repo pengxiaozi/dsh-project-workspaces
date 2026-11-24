@@ -2105,7 +2105,15 @@ window.__ModuleLoader__.load({
       const summaryWorkspaces = selectedCount
         ? '1 个根目录 + ' + selectedCount + ' 个子工作区（共 ' + (selectedCount + 1) + ' 个）'
         : '1 个根目录工作区'
-      return h('div', { className: 'pw-modal', onClick: props.onClose },
+      // 打开弹窗的那次点击可能「穿透」到遮罩上（React 18 同步渲染），
+      // 加一个很短的守卫窗口，避免刚打开就被自己关掉。
+      const openedAt = React.useRef(Date.now())
+      function backdropClick(event, close) {
+        if (Date.now() - openedAt.current < 300) return
+        if (event && event.target !== event.currentTarget) return
+        close()
+      }
+      return h('div', { className: 'pw-modal', onClick: function (event) { backdropClick(event, props.onClose) } },
         h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
@@ -2233,7 +2241,15 @@ window.__ModuleLoader__.load({
           props.onSaved()
         } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
       }
-      return h('div', { className: 'pw-modal', onClick: props.onClose },
+      // 打开弹窗的那次点击可能「穿透」到遮罩上（React 18 同步渲染），
+      // 加一个很短的守卫窗口，避免刚打开就被自己关掉。
+      const openedAt = React.useRef(Date.now())
+      function backdropClick(event, close) {
+        if (Date.now() - openedAt.current < 300) return
+        if (event && event.target !== event.currentTarget) return
+        close()
+      }
+      return h('div', { className: 'pw-modal', onClick: function (event) { backdropClick(event, props.onClose) } },
         h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
@@ -2517,6 +2533,17 @@ window.__ModuleLoader__.load({
             onClose: function () { setEditSeed(null) },
             onSaved: function () { setEditSeed(null) }
           })
+        } else {
+          // 还在读 state：先撑一个「载入中」的卡片，别让弹窗闪一下又消失
+          dialog = h('div', { className: 'pw-modal', onClick: function () { setEditSeed(null) } },
+            h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+              h('div', { className: 'pw-modal-head' },
+                h('div', null, h('h3', { className: 'pw-modal-title' }, '编辑目录')),
+                h('button', { className: 'pw-close', title: '关闭', onClick: function () { setEditSeed(null) } }, glyph('IconCloseOutlineRegular', 16, '\u00D7'))
+              ),
+              h('div', { className: 'pw-muted' }, '正在读取项目信息…')
+            )
+          )
         }
       }
       return h(React.Fragment, null, dialog, h(SessionListDialog, { services: props.services }), h(CommandPalette, { services: props.services }), h(CompletionToasts, { services: props.services }))
