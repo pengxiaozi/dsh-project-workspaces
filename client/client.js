@@ -136,6 +136,9 @@ window.__ModuleLoader__.load({
       '.sbw-tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.sbw-roll-btn{padding:0;border:none;background:transparent;cursor:pointer;color:inherit;font:inherit}',
       '.sbw-roll-btn:hover{color:var(--dsw-alias-label-primary)}',
+      '.sbw-filter-all{font-weight:500}' +
+      '.sbw-filter-hint{display:flex;align-items:center;gap:6px;padding:2px 12px 6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
+      '.sbw-filter-clear{padding:0;border:none;background:transparent;cursor:pointer;color:var(--dsw-alias-brand-primary,#4d6bfe);font:inherit}' +
       '.sbw-filters{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px 6px 12px}',
       '.sbw-filter{height:22px;padding:0 9px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.24));border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 4%,transparent);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:20px;cursor:pointer;transition:background-color 120ms ease,border-color 120ms ease,color 120ms ease}',
       '.sbw-filter:hover{background:var(--dsw-alias-interactive-bg-hover)}',
@@ -346,6 +349,20 @@ window.__ModuleLoader__.load({
       const extra = String(alias || '').trim()
       return extra ? base + '(' + extra + ')' : base
     }
+    // 标签分隔：逗号/分号/顿号/竖线都算分隔符（和服务端 normalizeTags 保持一致）
+    function splitTags(value) {
+      if (!value) return []
+      const list = Array.isArray(value) ? value : String(value).split(/[,\uFF0C;\uFF1B\u3001|]/)
+      const out = []
+      for (const item of list) {
+        const tag = String(item == null ? '' : item).trim()
+        if (!tag) continue
+        if (out.some(function (known) { return known.toLowerCase() === tag.toLowerCase() })) continue
+        out.push(tag)
+        if (out.length >= 8) break
+      }
+      return out
+    }
     function tagChips(tags) {
       if (!tags || !tags.length) return null
       return h('span', { className: 'sbw-tags' }, tags.map(function (tag, index) {
@@ -364,7 +381,7 @@ window.__ModuleLoader__.load({
       return (rawProjects || []).map(function (project) {
         const children = (project.children || []).map(function (child) {
           const ws = byPath.get(normalizePath(child.path)) || byId.get(String(child.workspaceId || '')) || null
-          return { child: child, ws: ws || null }
+          return { child: Object.assign({}, child, { tags: splitTags(child.tags) }), ws: ws || null }
         })
         const selfWs = byPath.get(normalizePath(project.path || project.root)) || byId.get(String(project.workspaceId || '')) || null
         return {
@@ -372,7 +389,7 @@ window.__ModuleLoader__.load({
           root: project.name || baseName(project.root),
           path: project.path || project.root,
           alias: project.alias || '',
-          tags: project.tags || [],
+          tags: splitTags(project.tags),
           pinned: project.pinned === true,
           color: project.color || '',
           selfWs: selfWs || null,
@@ -1447,46 +1464,37 @@ window.__ModuleLoader__.load({
       useEffect(function () {
         function fit() {
           const box = scrollRef.current
-          if (!box) return
+          const root = rootRef.current
+          if (!box || !root) return
           if (typeof box.getBoundingClientRect !== 'function') return
-          const rect = box.getBoundingClientRect()
-          if (!rect || !rect.top) return
+          if (typeof root.getBoundingClientRect !== 'function') return
+          const rect = root.getBoundingClientRect()
+          if (!rect || typeof rect.top !== 'number') return
           const viewport = (typeof window !== 'undefined' && window.innerHeight) || 0
-          if (!viewport) return
-          // 关键：可用高度要取「视口底部」和「侧边栏容器底部」里更小的那个。
-          // 只看视口的话，滚动条会伸到容器外面，被父级裁掉一半，看上去就是「只能滚一半」。
+          // 关键：找最近的「容器查询容器」（侧边栏把工作区区域包在 container-type:size 里，
+          // 它本身是 flex:1 + min-height:0，高度确定）。不能用 .regionArea 之类的祖先：
+          // 它的行高是 max-content，由我们的内容撑开，拿它当底边会形成循环，永远填不满。
           let limit = viewport
-          // 往上找一层「结束位置在视口之内的祖先」，那就是侧边栏区域真正的底边。
-          // 自己（.sbw）的高度是内容撑开的，拿它当底边会形成循环，所以从父级开始找。
-          let el = rootRef.current
-          for (let i = 0; i < 5 && el; i += 1) {
+          let el = root
+          for (let i = 0; i < 8 && el; i += 1) {
             const parent = el.parentElement
-            if (!parent || typeof parent.getBoundingClientRect !== 'function') break
+            if (!parent) break
+            let containerType = ''
+            try {
+              containerType = window.getComputedStyle(parent).containerType || ''
+            } catch (err) {
+              containerType = ''
+            }
             const parentRect = parent.getBoundingClientRect()
-            if (parentRect && parentRect.bottom > 0 && parentRect.bottom < viewport - 1) {
+            if (String(containerType).indexOf('size') >= 0 && parentRect && parentRect.height > 0) {
               limit = Math.min(limit, parentRect.bottom)
               break
             }
             el = parent
           }
-          const bottomGap = 10
-          // 现代浏览器直接用 CSS 的 100cqh（见 .sbw-wide），这里只在容器查询不可用时兜底。
-          const supportsCqh = typeof CSS !== 'undefined' && CSS && typeof CSS.supports === 'function'
-            && (CSS.supports('max-height', '100cqh') || CSS.supports('height', '100cqh'))
-          if (supportsCqh) return
-          const root = rootRef.current
-          if (root && typeof root.getBoundingClientRect === 'function') {
-            const rootRect = root.getBoundingClientRect()
-            if (rootRect && typeof rootRect.top === 'number') {
-              const total = Math.max(160, Math.round(limit - rootRect.top - bottomGap))
-              if (total > 0 && root.style.height !== total + 'px') {
-                root.style.height = total + 'px'
-                root.style.maxHeight = total + 'px'
-              }
-            }
-          }
-          const available = Math.max(120, Math.round(limit - rect.top - bottomGap))
-          if (available > 0 && box.style.maxHeight !== available + 'px') box.style.maxHeight = available + 'px'
+          if (!viewport) return
+          const total = Math.max(160, Math.round(limit - rect.top - 6))
+          if (total > 0 && root.style.minHeight !== total + 'px') root.style.minHeight = total + 'px'
         }
         fit()
         const timer = setTimeout(fit, 60)
@@ -1572,14 +1580,25 @@ window.__ModuleLoader__.load({
           : null,
 
         allTags.length
-          ? h('div', { className: 'sbw-filters' }, allTags.map(function (tag) {
+          ? h('div', { className: 'sbw-filters' }, [
+            h('button', {
+              key: 'tag:__all__',
+              className: 'sbw-filter sbw-filter-all' + (tagFilter ? '' : ' on'),
+              title: '显示全部项目',
+              onClick: function () { setTagFilter('') },
+            }, '全部'),
+          ].concat(allTags.map(function (tag) {
             return h('button', {
               key: 'tag:' + tag,
               className: 'sbw-filter' + (tagFilter === tag ? ' on' : ''),
               title: tagFilter === tag ? '取消筛选' : '只看带「' + tag + '」标签的项目',
               onClick: function () { setTagFilter(tagFilter === tag ? '' : tag) },
             }, tag)
-          }))
+          })))
+          : null,
+        tagFilter
+          ? h('div', { className: 'sbw-filter-hint' }, '只看「' + tagFilter + '」：' + taggedProjects.length + ' / ' + (projects || []).length + ' 个项目',
+            h('button', { className: 'sbw-filter-clear', onClick: function () { setTagFilter('') } }, '显示全部'))
           : null,
         h('div', { className: 'sbw-scroll', ref: scrollRef },
           h('div', { className: 'sbw-list' },
