@@ -8,6 +8,8 @@ window.__ModuleLoader__.load({
     const h = React.createElement
     const { useEffect, useState } = React
     const NS = 'dsh-project-workspaces'
+    // 客户端版本号：方便在真机上确认「跑的是哪一版」
+    const CLIENT_VERSION = '0.1.69'
     const STATE_URL = '/dsh-project-workspaces/state'
     const OPEN_CREATE_EVENT = 'dsh-project-workspaces:open-create'
     const CHANGED_EVENT = 'dsh-project-workspaces:changed'
@@ -2183,6 +2185,7 @@ window.__ModuleLoader__.load({
       '.pw-dir input[type=checkbox]{flex:none;width:14px;height:14px;margin:0;accent-color:var(--dsw-alias-brand-primary)}' +
       '.pw-ws{justify-content:space-between;gap:12px}' +
       '.pw-dir b{font-weight:500}' +
+      '.pw-debug{margin-top:8px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);word-break:break-all}' +
       '.pw-muted{color:var(--dsw-alias-label-tertiary)}' +
       '.pw-field .pw-muted{margin-top:6px;font-size:12px;line-height:18px}' +
       '.pw-path{font-family:var(--ds-font-family-code,ui-monospace,Consolas,monospace);font-size:11px;line-height:16px;word-break:break-all;color:var(--dsw-alias-label-tertiary)}' +
@@ -2905,6 +2908,14 @@ window.__ModuleLoader__.load({
       if (!seed) return null
       const wantedWs = (seed.wsIds || []).map(String)
       const wantedIds = (seed.sessionIds || []).map(String)
+      let debugText = ''
+      try {
+        if (typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('DSH_PW_DEBUG') === '1') {
+          const raw = sessionsOfSnapshot(snapshot)
+          const keys = snapshot && typeof snapshot === 'object' ? Object.keys(snapshot).join(',') : String(snapshot)
+          debugText = '诊断 v' + CLIENT_VERSION + '：快照字段=[' + keys + ']，会话 ' + raw.length + ' 条，本次传参 wsIds=' + JSON.stringify(seed.wsIds || []) + ' sessionIds=' + JSON.stringify(seed.sessionIds || [])
+        }
+      } catch (err) { debugText = '' }
       const all = sessionsOfSnapshot(snapshot).filter(function (item) {
         if (!wantedWs.length && !wantedIds.length) return true
         if (wantedIds.length && wantedIds.indexOf(String(item.id)) >= 0) return true
@@ -2963,7 +2974,9 @@ window.__ModuleLoader__.load({
                 )
               })
               : h('div', { className: 'pw-muted' }, '没有匹配的会话'))
-            : h('div', { className: 'pw-muted' }, '这个目录下还没有会话'),
+            : h('div', { className: 'pw-muted' },
+              '这个目录下还没有会话',
+              debugText ? h('div', { className: 'pw-debug' }, debugText) : null),
           archiveError ? h('div', { className: 'pw-msg err' }, archiveError) : null
         )
       )
@@ -3173,7 +3186,7 @@ window.__ModuleLoader__.load({
         h('div', { className: 'pw-head' },
           h('div', null,
             h('h2', { className: 'pw-title' }, '项目工作区（子目录会话）'),
-            h('p', { className: 'pw-sub' }, '一个项目 = 根目录 + 若干独立子工作区。点「新建项目」选目录、命名并勾选子目录；左侧工作区面板按 项目 → 子工作区 → 会话 展示。')
+            h('p', { className: 'pw-sub' }, '一个项目 = 根目录 + 若干独立子工作区。点「新建项目」选目录、命名并勾选子目录；左侧工作区面板按 项目 → 子工作区 → 会话 展示。客户端 v' + CLIENT_VERSION)
           ),
           h('div', { className: 'pw-row' },
             h('button', { className: 'pw-btn primary', onClick: function () { setDialog(true) } }, '＋ 新建项目'),
