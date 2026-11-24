@@ -3656,6 +3656,12 @@ window.__ModuleLoader__.load({
           inject: function () { return { services: services } },
         }, function (props) { return h(Panel, { services: (props && props.services) || services }) })
       })
+      ctx.slots.inject('conversation.header.leading', function () {
+        return ctx.slots.register({
+          name: 'conversation.header.leading',
+          inject: function () { return { services: services } },
+        }, function (props) { return h(SessionTabs, Object.assign({}, props, { services: (props && props.services) || services })) })
+      })
       ctx.slots.inject('shell.overlay', function () {
         return ctx.slots.register({ name: 'shell.overlay', id: NS + '-create', order: 80 }, function () {
           return h(OverlayHost, { services: services })

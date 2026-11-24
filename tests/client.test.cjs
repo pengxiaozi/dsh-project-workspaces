@@ -50,7 +50,8 @@ function makeEnv(options) {
   mod.apply(ctx)
   const sidebar = registered.find((r) => r.name === 'sidebar.workspaces')
   const overlay = registered.find((r) => r.name === 'shell.overlay')
-  return { env, sandbox: env.sandbox, mod, ctx, registered, sidebar, overlay, opened, archived, started }
+  const tabs = registered.find((r) => r.name === 'conversation.header.leading')
+  return { env, sandbox: env.sandbox, mod, ctx, registered, sidebar, overlay, tabs, opened, archived, started }
 }
 
 async function flush() {
@@ -115,10 +116,10 @@ function stubFetch(state) {
   })
 }
 
-test('注册了侧边栏、设置面板与 overlay 三个槽位', () => {
+test('注册了侧边栏、设置面板、overlay 与标签条四个槽位', () => {
   const env = makeEnv()
   const names = env.registered.map((r) => r.name).sort()
-  assert.deepEqual(names, ['settings.section', 'shell.overlay', 'sidebar.workspaces'])
+  assert.deepEqual(names, ['conversation.header.leading', 'settings.section', 'shell.overlay', 'sidebar.workspaces'])
   assert.equal(env.sidebar.options.priority, -100, '侧边栏必须以 -100 抢占原生槽位')
 })
 
@@ -178,6 +179,32 @@ test('会话行可以归档，调用 uiWorkspace.archiveSession', async () => {
   TR.act(() => { btn.props.onClick({ stopPropagation() {}, preventDefault() {}, currentTarget: {} }) })
   await flush()
   assert.deepEqual(archived, ['s1'])
+})
+
+test('会话标签条仍然保留：打开会话后出现标签，点 × 移除', async () => {
+  const env = makeEnv()
+  global.fetch = stubFetch(PROJECT_STATE)
+  const sessions = [{ id: 's1', sessionId: 's1', title: '会话一' }]
+  env.sandbox.localStorage.setItem('dsh-project-workspaces:tabs', JSON.stringify(['s1']))
+  let renderer
+  TR.act(() => {
+    renderer = TR.create(React.createElement(env.tabs.component, {
+      services: {
+        sessions: { list: listOf(sessions) },
+        workspaces: { list: listOf([]) },
+        uiWorkspace: { openSession() {}, async startSession() {} },
+      },
+    }))
+  })
+  await flush()
+  const tabEls = renderer.root.findAll((n) => n.props && typeof n.props.className === 'string' && n.props.className.split(' ').includes('pwt-tab'))
+  assert.equal(tabEls.length, 1, '应有一个标签，实际 ' + tabEls.length)
+  const close = renderer.root.findAll((n) => n.props && typeof n.props.className === 'string' && n.props.className.split(' ').includes('pwt-x'))[0]
+  assert.ok(close, '标签应有 × 关闭按钮')
+  TR.act(() => { close.props.onClick({ stopPropagation() {}, preventDefault() {}, currentTarget: {} }) })
+  await flush()
+  const after = renderer.root.findAll((n) => n.props && typeof n.props.className === 'string' && n.props.className.split(' ').includes('pwt-tab'))
+  assert.equal(after.length, 0, '点 × 后标签应移除')
 })
 
 test('会话列表弹窗：session 快照缺 workspaceId 时仍能列出该工作区的会话（防回归：弹窗 0 个会话）', async () => {
