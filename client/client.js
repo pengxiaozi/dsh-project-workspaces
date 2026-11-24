@@ -2399,7 +2399,8 @@ window.__ModuleLoader__.load({
     ]
 
     const TABS_CSS = [
-      '.pwt-band{box-sizing:border-box;z-index:40;display:flex;align-items:center;height:38px;padding:0 14px;gap:10px;background:var(--dsw-alias-bg-base,#fff);border-bottom:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
+      '.pwt-band{box-sizing:border-box;z-index:5;pointer-events:none;display:flex;align-items:center;height:38px;padding:0 14px;gap:10px;background:var(--dsw-alias-bg-base,#fff);border-bottom:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
+      '.pwt-inner{pointer-events:auto;display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0}',
       '.pwt-probe{position:absolute;width:1px;height:1px;pointer-events:none;opacity:0}',
       '.pwt-inner{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:10px}',
       '.pwt{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;scroll-behavior:smooth;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}',
