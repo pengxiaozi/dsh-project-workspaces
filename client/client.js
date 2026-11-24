@@ -1858,9 +1858,51 @@ window.__ModuleLoader__.load({
         // 由内容撑开。所以「填满」不能只靠量高度（会循环），得把这一行的行高改成 1fr，
         // 让它去吃剩下的空间；下面的 footer 插件（设置、其他入口）在另一块区域，不受影响。
         const undo = []
+        // 「工作区」上方如果挂着一个纯占位块（flex-grow>0 且没有文字/子元素），
+        // 内容一少它就把整块区域往下推，看起来像「上面留了一大片空白」。
+        // 这里顺着祖先往上找 3 层，把这种空占位块收掉，并让容器成为伸缩项。
+        function collapseSpacers(el) {
+          let node = el
+          for (let level = 0; level < 3 && node && node.parentElement; level += 1) {
+            const parent = node.parentElement
+            let display = ''
+            try {
+              display = window.getComputedStyle(parent).display
+            } catch (err) {
+              display = ''
+            }
+            if (display === 'flex') {
+              const kids = Array.prototype.slice.call(parent.children)
+              const index = kids.indexOf(node)
+              for (let i = 0; i < index; i += 1) {
+                const sib = kids[i]
+                let sibStyle = null
+                try {
+                  sibStyle = window.getComputedStyle(sib)
+                } catch (err) {
+                  sibStyle = null
+                }
+                if (!sibStyle) continue
+                if ((parseFloat(sibStyle.flexGrow) || 0) <= 0) continue
+                const hasText = String(sib.textContent || '').trim().length > 0
+                if (hasText || sib.childElementCount > 0) continue
+                sib.style.flex = '0 0 auto'
+                undo.push(function () { sib.style.flex = '' })
+              }
+              if (index === kids.length - 1) {
+                node.style.flex = '1 1 auto'
+                node.style.minHeight = '0'
+                node.style.marginTop = '0'
+                undo.push(function () { node.style.flex = ''; node.style.minHeight = ''; node.style.marginTop = '' })
+              }
+            }
+            node = parent
+          }
+        }
         function adaptLayout() {
           const rootEl = rootRef.current
           if (!rootEl) return
+          collapseSpacers(rootEl)
           let el = rootEl
           let grid = null
           let region = null
