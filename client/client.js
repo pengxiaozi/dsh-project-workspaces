@@ -35,8 +35,8 @@ window.__ModuleLoader__.load({
     }
     // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
     const SIDEBAR_CSS = [
-      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit);height:100%}',
-      '.sbw-wide{flex:1 1 auto;min-height:0;max-height:100%;overflow:hidden}',
+      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
+      '.sbw-wide{flex:1 1 auto;min-height:0;max-height:100%}',
       '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);overflow:hidden;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
       '.sbw-hd-label{font-weight:500;letter-spacing:.02em}',
@@ -52,7 +52,7 @@ window.__ModuleLoader__.load({
       '.sbw-search input{flex:1;width:0;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}',
       '.sbw-search input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.sbw-scroll{flex:1;min-height:0;display:flex;flex-direction:column}',
-      '.sbw-wide .sbw-scroll{display:block;flex:1 1 auto;min-height:0;max-height:100%;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
+      '.sbw-wide .sbw-scroll{display:block;flex:1 1 auto;min-height:0;max-height:100%;-webkit-overflow-scrolling:touch;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
       '.sbw-wide .sbw-scroll{touch-action:pan-y}',
       '.sbw-skel{padding:2px 8px}',
       '.sbw-skel-row{display:flex;align-items:center;gap:8px;height:32px;padding-left:calc(var(--dsh-sidebar-row-padding,12px) - 3px)}',
@@ -1415,11 +1415,41 @@ window.__ModuleLoader__.load({
       const tempVisible = looseVisible.filter(isTempWs)
       const otherLoose = looseVisible.filter(function (ws) { return !isTempWs(ws) })
       const empty = !hasProjects && !looseVisible.length && !(legacy.length && !tree)
+      const rootRef = React.useRef(null)
+      // 兜底：不管祖先有没有给出确定高度，都按视口算一次列表可用高度，保证能滚动
+      useEffect(function () {
+        function fit() {
+          const box = scrollRef.current
+          if (!box) return
+          if (typeof box.getBoundingClientRect !== 'function') return
+          const rect = box.getBoundingClientRect()
+          if (!rect || !rect.top) return
+          const viewport = (typeof window !== 'undefined' && window.innerHeight) || 0
+          if (!viewport) return
+          const bottomGap = 18
+          const available = Math.max(140, Math.round(viewport - rect.top - bottomGap))
+          if (available > 0) box.style.maxHeight = available + 'px'
+        }
+        fit()
+        const timer = setTimeout(fit, 60)
+        window.addEventListener('resize', fit)
+        let observer = null
+        if (typeof ResizeObserver === 'function' && rootRef.current) {
+          observer = new ResizeObserver(function () { fit() })
+          observer.observe(rootRef.current)
+        }
+        return function () {
+          clearTimeout(timer)
+          window.removeEventListener('resize', fit)
+          if (observer) observer.disconnect()
+        }
+      }, [])
+
       const uiSettings = uiConfig || {}
       const uiVars = {}
       if (uiSettings.runningBg) uiVars['--sbw-run-bg'] = uiSettings.runningBg
       if (uiSettings.runningFg) uiVars['--sbw-run-fg'] = uiSettings.runningFg
-      return h('div', { className: 'sbw sbw-wide', style: uiVars },
+      return h('div', { className: 'sbw sbw-wide', style: uiVars, ref: rootRef },
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
           searchOpen ? null : h('span', { className: 'sbw-hd-label' }, '工作区'),
           searchOpen || !headerSum ? null : h('span', { className: 'sbw-hd-sum', title: (headerSum.running ? headerSum.running + ' 个会话正在回答' : '') + (headerSum.pending ? (headerSum.running ? '，' : '') + headerSum.pending + ' 个等待你处理' : '') },
