@@ -116,6 +116,7 @@ window.__ModuleLoader__.load({
       '.sbw-folder-hit{padding:0;border:none;background:transparent;cursor:pointer;color:inherit}',
       '.sbw-folder-hit:hover{color:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-folder{position:relative}',
+      '.sbw-folder::after{pointer-events:none}',
       '.sbw-folder.act-ongoing::after{content:"";position:absolute;right:-3px;bottom:-1px;width:8px;height:8px;border-radius:50%;border:1.5px solid transparent;background:var(--dsw-alias-bg-base,#fff);border-top-color:var(--dsw-alias-state-business-primary,#4d6bfe);border-right-color:var(--dsw-alias-state-business-primary,#4d6bfe);animation:sbw-spin .9s linear infinite}',
       '.sbw-folder.act-warning::after{content:"";position:absolute;right:-2px;bottom:0;width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-warn-primary,#c98a00);filter:drop-shadow(0 0 1.5px var(--dsw-alias-bg-base,#fff))}',
       '.sbw-folder.act-done::after{content:"";position:absolute;right:-2px;bottom:0;width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-success-primary,#2ea043);filter:drop-shadow(0 0 1.5px var(--dsw-alias-bg-base,#fff))}',
@@ -1356,16 +1357,19 @@ window.__ModuleLoader__.load({
       // 标题栏总览：全站在跑 / 待处理的会话数，收起侧边栏前也能一眼看到
       const headerSum = (function () {
         if (!statusMap) return null
-        let running = 0
-        let pending = 0
-        const each = function (status) {
+        const runningIds = []
+        const pendingIds = []
+        const each = function (status, key) {
           if (!status) return
-          if (status.pendingInteraction) pending += 1
-          else if (status.running) running += 1
+          const id = String(key)
+          if (status.pendingInteraction) pendingIds.push(id)
+          else if (status.running) runningIds.push(id)
         }
-        if (typeof statusMap.forEach === 'function') statusMap.forEach(each)
-        else Object.keys(statusMap).forEach(function (key) { each(statusMap[key]) })
-        return (running || pending) ? { running: running, pending: pending } : null
+        if (typeof statusMap.forEach === 'function') statusMap.forEach(function (status, key) { each(status, key) })
+        else Object.keys(statusMap).forEach(function (key) { each(statusMap[key], key) })
+        return (runningIds.length || pendingIds.length)
+          ? { running: runningIds.length, pending: pendingIds.length, runningIds: runningIds, pendingIds: pendingIds }
+          : null
       })()
       // 顶部标签条：把正在回答 / 等待处理（以及未读完成）的会话铺在最上面，点一下就切过去
       const activeTabs = (function () {
@@ -1453,8 +1457,16 @@ window.__ModuleLoader__.load({
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
           searchOpen ? null : h('span', { className: 'sbw-hd-label' }, '工作区'),
           searchOpen || !headerSum ? null : h('span', { className: 'sbw-hd-sum', title: (headerSum.running ? headerSum.running + ' 个会话正在回答' : '') + (headerSum.pending ? (headerSum.running ? '，' : '') + headerSum.pending + ' 个等待你处理' : '') },
-            headerSum.pending ? h('span', { className: 'sbw-roll-item' }, statusDot('warning'), String(headerSum.pending)) : null,
-            headerSum.running ? h('span', { className: 'sbw-roll-item' }, statusDot('ongoing'), String(headerSum.running)) : null
+            headerSum.pending ? h('button', {
+              className: 'sbw-roll-item sbw-roll-btn',
+              title: headerSum.pending + ' 个会话等待你处理（点一下打开）',
+              onClick: function (event) { event.stopPropagation(); if (headerSum.pendingIds.length) openSession(headerSum.pendingIds[0]) },
+            }, statusDot('warning'), String(headerSum.pending)) : null,
+            headerSum.running ? h('button', {
+              className: 'sbw-roll-item sbw-roll-btn',
+              title: headerSum.running + ' 个会话正在回答（点一下打开）',
+              onClick: function (event) { event.stopPropagation(); if (headerSum.runningIds.length) openSession(headerSum.runningIds[0]) },
+            }, statusDot('ongoing'), String(headerSum.running)) : null
           ),
           searchOpen
             ? h('div', { className: 'sbw-hd-search open' },
