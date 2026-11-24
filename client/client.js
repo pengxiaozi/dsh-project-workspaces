@@ -96,7 +96,12 @@ window.__ModuleLoader__.load({
       '.sbw-sess.running{background:var(--sbw-run-bg,color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 10%, transparent));color:var(--sbw-run-fg,inherit)}',
       '.sbw-sess.running .sbw-title{color:inherit}',
       '.sbw-sess.running:hover{filter:brightness(.985)}',
-      '.sbw-sess.selected{position:relative;background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 12%, transparent)}',
+      '.sbw-now{display:flex;align-items:center;gap:6px;flex:none;margin:0 8px 6px 12px;padding:0 8px;height:26px;border-radius:var(--dsw-radius-sm,8px);background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 10%, transparent);border:0.5px solid color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 26%, transparent);cursor:pointer;overflow:hidden}' +
+      '.sbw-now-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-brand-primary,#4d6bfe)}' +
+      '.sbw-now-label{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-brand-primary,#4d6bfe)}' +
+      '.sbw-now-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;line-height:18px;color:var(--dsw-alias-label-primary);font-weight:500}' +
+      '.sbw-cur{flex:none;font-size:10px;line-height:16px;padding:0 5px;border-radius:999px;color:var(--dsw-alias-brand-primary,#4d6bfe);background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 16%, transparent)}' +
+      '.sbw-sess.selected{position:relative;background-color:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 15%, transparent)}',
       '.sbw-sess.selected::before{content:"";position:absolute;top:7px;bottom:7px;left:6px;width:2px;border-radius:1px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-sess.selected .sbw-title{color:var(--dsw-alias-brand-primary,#4d6bfe);font-weight:500}',
       '.sbw-sess.selected:hover{background-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 16%,transparent)}',
@@ -943,6 +948,7 @@ window.__ModuleLoader__.load({
                   },
                 })
               : h('span', { className: 'sbw-title' }, sessionLabel(summary)),
+            active ? h('span', { className: 'sbw-cur' }, '当前') : null,
             (function () {
               const trail = statusTrailing(id)
               if (trail) return h('span', { className: 'sbw-trail' }, trail)
@@ -1371,6 +1377,21 @@ window.__ModuleLoader__.load({
           ? { running: runningIds.length, pending: pendingIds.length, runningIds: runningIds, pendingIds: pendingIds }
           : null
       })()
+      // 当前会话：标题栏下面固定一行，提醒「我刚才在跟哪个会话说话」，点一下滚过去
+      const currentLabel = activeSessionId && summaries[activeSessionId] ? sessionLabel(summaries[activeSessionId]) : ''
+      const nowBar = (activeSessionId && currentLabel && !searchOpen)
+        ? h('div', {
+          className: 'sbw-now',
+          title: currentLabel,
+          onClick: function () {
+            const node = sessionNodes.current[activeSessionId]
+            if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'center' })
+          },
+        },
+          h('span', { className: 'sbw-now-dot' }),
+          h('span', { className: 'sbw-now-label' }, '当前会话'),
+          h('span', { className: 'sbw-now-title' }, currentLabel))
+        : null
       // 顶部标签条：把正在回答 / 等待处理（以及未读完成）的会话铺在最上面，点一下就切过去
       const activeTabs = (function () {
         const rows = []
@@ -1503,6 +1524,7 @@ window.__ModuleLoader__.load({
           )
         ),
         error ? h('div', { className: 'sbw-msg' }, error) : null,
+        nowBar,
         activeTabs.length
           ? h('div', { className: 'sbw-tabs' }, activeTabs.map(function (tab) {
             return h('button', {
