@@ -658,6 +658,9 @@ window.__ModuleLoader__.load({
           })
           if (!best) return
           const segs = relSegments(best.path, ws.path)
+          // 只在「直接子目录 / 一层子目录」时自动挂；更深说明它其实属于另一个项目，
+          // 硬塞进上层项目（比如 WWW）只会变成很长一串，反而不如留在下面平铺。
+          if (segs.length > 2) return
           best.children.push({
             child: { name: segs.join('/') || baseName(ws.path), path: ws.path, alias: '', tags: [], auto: true },
             ws: ws,
