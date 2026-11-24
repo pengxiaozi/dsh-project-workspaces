@@ -1162,6 +1162,15 @@ window.__ModuleLoader__.load({
                         exportSessions([ws], sessionLabel(summary))
                       },
                     }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
+                    h('button', {
+                      key: 'archive',
+                      className: 'sbw-mini sbw-opt sbw-danger',
+                      title: '归档这个会话',
+                      onClick: function (e) {
+                        e.stopPropagation()
+                        archiveSession(String(id), sessionLabel(summary))
+                      },
+                    }, glyph('IconTrashOutlineRegular', 14, '删')),
                   ]
             )
           )
@@ -1969,6 +1978,94 @@ window.__ModuleLoader__.load({
       const uiVars = {}
       if (uiSettings.runningBg) uiVars['--sbw-run-bg'] = uiSettings.runningBg
       if (uiSettings.runningFg) uiVars['--sbw-run-fg'] = uiSettings.runningFg
+      // ===== 简化版侧边栏：只有「项目 → 子工作区 → 会话」，不再有卡片/标签条/筛选/角标 =====
+      const simpleRows = []
+      ;(projects || []).forEach(function (project) {
+        const pKey = 'p:' + project.id
+        const pOpen = openRoots[pKey] !== false
+        const pTitle = displayName(project.name || baseName(project.path || project.root), project.alias)
+        const kids = project.children || []
+        simpleRows.push(h('div', {
+          key: pKey,
+          className: 'sbw-row sbw-proj' + (projectHasCurrent(project) ? ' has-active' : ''),
+          style: { '--sbw-indent': '0px' },
+          title: withActivity(String(project.path || project.root || ''), rollupActivity(projectRollup(project))),
+          onClick: function () { toggleRoot(pKey) },
+        },
+          h('span', { className: 'sbw-slot sbw-folder', style: project.color ? { color: project.color } : undefined }, FolderIcon({ open: pOpen })),
+          h('span', { className: 'sbw-text' },
+            h('span', { className: 'sbw-title' }, pTitle),
+            project.tags && project.tags.length ? tagChips(project.tags) : null
+          ),
+          h('span', { className: 'sbw-count' }, kids.length ? String(kids.length) : '')
+        ))
+        if (!pOpen) return
+        kids.forEach(function (item) {
+          const child = item && item.child ? item.child : null
+          if (!item || !item.ws) {
+            simpleRows.push(h('div', {
+              key: pKey + ':u:' + (child ? child.name : Math.random()),
+              className: 'sbw-row',
+              style: { '--sbw-indent': '12px' },
+              title: '这个子目录还不是工作区：点右下角 ✎ 可以补注册',
+            },
+              h('span', { className: 'sbw-slot sbw-folder' }, FolderIcon({ open: false })),
+              h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title dim' }, child ? child.name : '未知目录')),
+              h('span', { className: 'sbw-count' }, '未注册')
+            ))
+            return
+          }
+          simpleRows.push(workspaceNode(item.ws, child && child.name ? child.name : '', pKey + ':' + (child ? child.name : item.ws.workspaceId), 1, { projectId: project.id, child: child }))
+        })
+        if (!kids.length && project.selfWs) {
+          simpleRows.push(workspaceNode(project.selfWs, project.name || baseName(project.selfWs.path), pKey + ':self', 1, { projectId: project.id, child: null }))
+        }
+      })
+      ;(otherLoose || []).forEach(function (ws) {
+        simpleRows.push(workspaceNode(ws, ws.title || baseName(ws.path), 'loose:' + String(ws.workspaceId), 0, null))
+      })
+      const simpleList = !loaded
+        ? h('div', { className: 'sbw-list' }, h('div', { className: 'sbw-empty' }, '加载中…'))
+        : (simpleRows.length
+          ? h('div', { className: 'sbw-list' }, simpleRows)
+          : h('div', { className: 'sbw-list' }, h('div', { className: 'sbw-empty-state' },
+            h('div', { className: 'sbw-empty-ico' }, glyph('IconFolderOpenRegular', 26, '▤')),
+            h('div', { className: 'sbw-empty-title' }, '还没有项目'),
+            h('div', { className: 'sbw-empty-desc' }, '选一个根目录并命名，再把要独立开的子目录勾上，就会变成「项目 → 子工作区」。'),
+            h('button', { className: 'sbw-empty-btn', onClick: function () { openCreateDialog({}) } }, '＋ 新建项目')
+          )))
+
+      return h('div', { className: 'sbw sbw-wide', style: uiVars, ref: rootRef },
+        h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
+          searchOpen
+            ? h('label', { className: 'sbw-search open' },
+              h('input', {
+                autoFocus: true,
+                value: query,
+                placeholder: '搜索项目 / 工作区 / 会话',
+                onChange: function (e) { setQuery(e.target.value) },
+                onKeyDown: function (e) { if (e.key === 'Escape') { setQuery(''); setSearchOpen(false) } },
+              })
+            )
+            : h('span', { className: 'sbw-hd-label' }, '工作区'),
+          searchOpen
+            ? null
+            : h('div', { className: 'sbw-hd-search' },
+              h('button', { className: 'sbw-ibtn', title: '搜索', onClick: function () { setSearchOpen(true) } }, glyph('IconSearchOutlineRegular', 16, '⌕'))
+            ),
+          h('div', { className: 'sbw-hd-actions' },
+            searchOpen
+              ? h('button', { className: 'sbw-ibtn', title: '关闭搜索', onClick: function () { setQuery(''); setSearchOpen(false) } }, glyph('IconCloseOutlineRegular', 16, '✕'))
+              : h('button', { className: 'sbw-ibtn', title: '新建项目', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋')),
+            searchOpen
+              ? null
+              : h('button', { className: 'sbw-ibtn', title: '刷新', onClick: loadTree }, glyph('IconRefreshOutlineRegular', 16, '⟳'))
+          )
+        ),
+        error ? h('div', { className: 'sbw-msg' }, error) : null,
+        h('div', { className: 'sbw-scroll', ref: scrollRef }, simpleList)
+      )
+
       return h('div', { className: 'sbw sbw-wide', style: uiVars, ref: rootRef },
         h('div', { className: 'sbw-hd' + (searchOpen ? ' open' : '') },
           searchOpen ? null : h('span', { className: 'sbw-hd-label' }, flatMode ? ('所有会话 · ' + flatRows.length) : '工作区'),
@@ -3558,12 +3655,6 @@ window.__ModuleLoader__.load({
           label: function () { return '项目工作区' },
           inject: function () { return { services: services } },
         }, function (props) { return h(Panel, { services: (props && props.services) || services }) })
-      })
-      ctx.slots.inject('conversation.header.leading', function () {
-        return ctx.slots.register({
-          name: 'conversation.header.leading',
-          inject: function () { return { services: services } },
-        }, function (props) { return h(SessionTabs, Object.assign({}, props, { services: (props && props.services) || services })) })
       })
       ctx.slots.inject('shell.overlay', function () {
         return ctx.slots.register({ name: 'shell.overlay', id: NS + '-create', order: 80 }, function () {
