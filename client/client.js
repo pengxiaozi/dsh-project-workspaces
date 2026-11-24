@@ -2107,9 +2107,12 @@ window.__ModuleLoader__.load({
     ].join('')
 
     const TABS_CSS = [
-      '.pwt{display:flex;align-items:center;gap:4px;min-width:0;max-width:min(520px,48vw);overflow-x:auto;scrollbar-width:none;margin-right:8px}',
+      '.pwt-band{box-sizing:border-box;z-index:40;display:flex;align-items:center;height:36px;padding:0 12px;background:var(--dsw-alias-bg-base,#fff);border-bottom:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
+      '.pwt-probe{position:absolute;width:1px;height:1px;pointer-events:none;opacity:0}',
+      '.pwt-inner{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px}',
+      '.pwt{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:4px;overflow-x:auto;scrollbar-width:none}',
       '.pwt::-webkit-scrollbar{display:none}',
-      '.pwt-tab{flex:none;display:inline-flex;align-items:center;max-width:190px;height:26px;border-radius:999px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);border:0.5px solid transparent;transition:background-color 120ms ease,border-color 120ms ease}',
+      '.pwt-tab{flex:none;display:inline-flex;align-items:center;max-width:200px;height:26px;border-radius:999px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);border:0.5px solid transparent;transition:background-color 120ms ease,border-color 120ms ease}',
       '.pwt-tab:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06))}',
       '.pwt-tab.on{background:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 14%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 30%,transparent)}',
       '.pwt-hit{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;height:100%;padding:0 4px 0 10px;border:none;background:transparent;cursor:pointer;color:var(--dsw-alias-label-secondary);font-family:inherit}',
@@ -2118,7 +2121,7 @@ window.__ModuleLoader__.load({
       '.pwt-x{flex:none;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:4px;border:none;border-radius:50%;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;opacity:0;transition:opacity 120ms ease,background-color 120ms ease}',
       '.pwt-tab:hover .pwt-x{opacity:1}',
       '.pwt-x:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary)}',
-      '.pwt-add{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
+      '.pwt-add{flex:none;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:var(--dsw-radius-sm,8px);background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer}',
       '.pwt-add:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary)}',
     ].join('')
 
@@ -2984,6 +2987,7 @@ window.__ModuleLoader__.load({
       // ── 右侧顶部会话标签条：最近打开的会话排成一行，点一下切过去 ──
       const TABS_KEY = 'dsh-project-workspaces:tabs'
       const MAX_TABS = 8
+      const BAND_HEIGHT = 36
       function readTabs() {
         try {
           const raw = window.localStorage && window.localStorage.getItem(TABS_KEY)
@@ -3007,6 +3011,8 @@ window.__ModuleLoader__.load({
           || snap.activeId || snap.selectedId
           || (snap.active && snap.active.id) || (snap.current && snap.current.id))) || '')
         const [order, setOrder] = useState(readTabs)
+        const [box, setBox] = useState(null)          // { left, top, width, header }
+        const probeRef = React.useRef(null)
         useEffect(function () {
           if (!activeId) return
           setOrder(function (prev) {
@@ -3016,6 +3022,50 @@ window.__ModuleLoader__.load({
             return next
           })
         }, [activeId])
+        // 量出标题栏的位置：标签条贴到它正上方，并把标题栏整体下移，形成独立一条
+        useEffect(function () {
+          function measure() {
+            const node = probeRef.current
+            if (!node || typeof node.getBoundingClientRect !== 'function') return
+            const rect = node.getBoundingClientRect()
+            if (!rect || !rect.width) return
+            let best = node.parentElement
+            let cur = node.parentElement
+            for (let i = 0; i < 6 && cur && cur.parentElement; i += 1) {
+              const rr = cur.getBoundingClientRect()
+              if (!rr || rr.height > 98) break
+              if (rr.width > rect.width + 4) best = cur
+              cur = cur.parentElement
+            }
+            const header = best || node.parentElement
+            if (!header || typeof header.getBoundingClientRect !== 'function') return
+            const hr = header.getBoundingClientRect()
+            setBox({ left: Math.round(hr.left), top: Math.round(hr.top), width: Math.round(hr.width), header: header })
+          }
+          measure()
+          const timer = setTimeout(measure, 80)
+          function onResize() { measure() }
+          window.addEventListener('resize', onResize)
+          let observer = null
+          try {
+            if (window.ResizeObserver && probeRef.current) {
+              observer = new window.ResizeObserver(function () { measure() })
+              observer.observe(probeRef.current)
+            }
+          } catch (err) { void err }
+          return function () {
+            clearTimeout(timer)
+            window.removeEventListener('resize', onResize)
+            if (observer) { try { observer.disconnect() } catch (err) { void err } }
+          }
+        }, [])
+        useEffect(function () {
+          const header = box && box.header
+          if (!header || !header.style) return undefined
+          const previous = header.style.marginTop
+          header.style.marginTop = BAND_HEIGHT + 'px'
+          return function () { header.style.marginTop = previous || '' }
+        }, [box])
         function drop(id) {
           setOrder(function (prev) {
             const next = prev.filter(function (x) { return x !== id })
@@ -3027,24 +3077,31 @@ window.__ModuleLoader__.load({
           try { window.dispatchEvent(new CustomEvent('dsh-project-workspaces:open-palette')) } catch (err) { void err }
         }
         const list = order.filter(function (id) { return summaries[id] })
-        if (!list.length) return null
-        return h('div', { className: 'pwt', role: 'tablist' },
-          list.map(function (id) {
-            return h('div', { key: 'tab:' + id, className: 'pwt-tab' + (id === activeId ? ' on' : ''), role: 'tab', title: sessionLabel(summaries[id]) },
-              h('button', {
-                className: 'pwt-hit',
-                onClick: function (e) {
-                  e.stopPropagation()
-                  if (services.uiWorkspace && typeof services.uiWorkspace.openSession === 'function') services.uiWorkspace.openSession(id)
-                },
-              }, h('span', { className: 'pwt-t' }, sessionLabel(summaries[id]))),
-              h('button', {
-                className: 'pwt-x',
-                title: '从标签栏移除（不会删除会话）',
-                onClick: function (e) { e.stopPropagation(); drop(id) },
-              }, glyph('IconCloseOutlineRegular', 12, '×')))
-          }),
-          h('button', { className: 'pwt-add', title: '打开会话列表（Ctrl+K）', onClick: function (e) { e.stopPropagation(); openAll() } }, glyph('IconFlatListOutlineRegular', 14, '≡')))
+        const style = box
+          ? { left: box.left + 'px', top: (box.top - BAND_HEIGHT) + 'px', width: box.width + 'px', position: 'fixed' }
+          : { position: 'absolute', left: '-9999px', top: '0px', width: '520px' }
+        return h('div', { className: 'pwt-band', style: style },
+          h('span', { ref: probeRef, className: 'pwt-probe' }),
+          list.length
+            ? h('div', { className: 'pwt-inner' },
+              h('div', { className: 'pwt', role: 'tablist' },
+                list.map(function (id) {
+                  return h('div', { key: 'tab:' + id, className: 'pwt-tab' + (id === activeId ? ' on' : ''), role: 'tab', title: sessionLabel(summaries[id]) },
+                    h('button', {
+                      className: 'pwt-hit',
+                      onClick: function (e) {
+                        e.stopPropagation()
+                        if (services.uiWorkspace && typeof services.uiWorkspace.openSession === 'function') services.uiWorkspace.openSession(id)
+                      },
+                    }, h('span', { className: 'pwt-t' }, sessionLabel(summaries[id]))),
+                    h('button', {
+                      className: 'pwt-x',
+                      title: '从标签栏移除（不会删除会话）',
+                      onClick: function (e) { e.stopPropagation(); drop(id) },
+                    }, glyph('IconCloseOutlineRegular', 12, '×')))
+                })),
+              h('button', { className: 'pwt-add', title: '打开会话列表（Ctrl+K）', onClick: function (e) { e.stopPropagation(); openAll() } }, glyph('IconFlatListOutlineRegular', 14, '≡')))
+            : null)
       }
 
     function apply(ctx) {
