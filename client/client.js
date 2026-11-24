@@ -1496,6 +1496,20 @@ window.__ModuleLoader__.load({
         return total
       }
 
+      function cardTreeSessionIds(node) {
+        const ids = []
+        if (node.item && node.item.ws) {
+          for (const id of sessionIdsOf(node.item.ws)) ids.push(String(id))
+          for (const summary of Object.values(summaries)) {
+            if (summary && summary.workspaceId === (node.item.ws.workspaceId || node.item.ws.id)) ids.push(String(summary.id))
+          }
+        }
+        for (const child of node.children.values()) {
+          for (const id of cardTreeSessionIds(child)) ids.push(id)
+        }
+        return Array.from(new Set(ids))
+      }
+
       function cardDirRow(node, key, level, project) {
         const hasKids = node.children.size > 0
         const open = cardDirs[key] === true
@@ -1509,8 +1523,7 @@ window.__ModuleLoader__.load({
             title: withActivity(label + ' · ' + node.path, state),
             onClick: function (e) {
               e.stopPropagation()
-              if (hasKids) setCardDirs(function (prev) { return Object.assign({}, prev, { [key]: !open }) })
-              else if (node.item && node.item.ws) openSessionList({ title: label, wsIds: wsIdsOf([node.item.ws]) })
+              if (hasKids || (node.item && node.item.ws)) setCardDirs(function (prev) { return Object.assign({}, prev, { [key]: !open }) })
             },
           },
             hasKids
@@ -1519,11 +1532,26 @@ window.__ModuleLoader__.load({
             h('span', { style: { flex: 'none', color: 'var(--dsw-alias-label-tertiary)' } }, glyph(open ? 'IconFolderOpenRegular' : 'IconFolderCloseRegular', 14, '▤')),
             h('span', { className: 'sbw-card-dir-name', style: CARD_STYLE.dirName }, label),
             state ? statusDot(state) : null,
-            h('span', { style: CARD_STYLE.dirCount }, String(cardTreeCount(node)))
+            h('span', { style: CARD_STYLE.dirCount, title: hasKids ? '该目录下的工作区数量' : '该目录的会话数量' }, hasKids ? String(cardTreeCount(node)) : String(cardTreeSessionIds(node).length))
           ),
         ]
         if (open && hasKids) {
           for (const entry of node.children) rows.push(cardDirRow(entry[1], key + '/' + entry[0], level + 1, project))
+        }
+        if (open && !hasKids && node.item && node.item.ws) {
+          const ids = cardTreeSessionIds(node)
+          const list = ids.map(function (id) { return summaries[id] }).filter(Boolean)
+          list.sort(function (a, b) { return sessionStamp(b) - sessionStamp(a) })
+          const shown = list.slice(0, 8)
+          for (const summary of shown) {
+            rows.push(h('div', { key: key + ':s:' + summary.id, style: { paddingLeft: (6 + (level + 1) * 12) + 'px' } }, cardSessionRow(summary, key + ':s:' + summary.id, false)))
+          }
+          if (list.length > shown.length) {
+            rows.push(h('div', { key: key + ':more', className: 'sbw-card-more', style: { paddingLeft: (6 + (level + 1) * 12) + 'px' }, onClick: function (e) { e.stopPropagation(); openSessionList({ title: label, wsIds: wsIdsOf([node.item.ws]) }) } }, '还有 ' + (list.length - shown.length) + ' 个会话'))
+          }
+          if (!shown.length) {
+            rows.push(h('div', { key: key + ':empty', className: 'sbw-card-empty', style: { paddingLeft: (6 + (level + 1) * 12) + 'px' } }, '暂无会话'))
+          }
         }
         return rows
       }
@@ -1533,7 +1561,9 @@ window.__ModuleLoader__.load({
         const rollup = projectRollup(project)
         const isRenaming = renaming === project.id
         const moreKey = 'card:' + project.id
-        const all = projectSessions(project)
+        const tree = project.children && project.children.length ? cardTree(project) : null
+        const covered = new Set(tree ? cardTreeSessionIds(tree) : [])
+        const all = projectSessions(project).filter(function (item) { return !covered.has(String(item.id)) })
         const expanded = moreOpen[moreKey] === true
         let shown = expanded || needle ? all : all.slice(0, 4)
         // 当前会话排在预览之外时，把它挤进预览，保证「点标签后左侧能看到并高亮」
@@ -1622,9 +1652,8 @@ window.__ModuleLoader__.load({
           ),
           open
             ? h('div', { className: 'sbw-card-body' },
-              project.children && project.children.length
+              tree
                 ? h('div', { className: 'sbw-card-tree', style: CARD_STYLE.tree }, (function () {
-                  const tree = cardTree(project)
                   const rows = []
                   for (const entry of tree.children) rows.push(cardDirRow(entry[1], 'cd:' + project.id + '/' + entry[0], 0, project))
                   return rows
@@ -1632,7 +1661,7 @@ window.__ModuleLoader__.load({
                 : null,
               shown.length
                 ? h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id, subs.length + (project.selfWs ? 1 : 0) > 1) }))
-                : h('div', { className: 'sbw-card-empty' }, '暂无会话'),
+                : (tree ? null : h('div', { className: 'sbw-card-empty' }, '暂无会话')),
               rest > 0
                 ? h('button', {
                   className: 'sbw-card-more',
