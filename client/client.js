@@ -1956,13 +1956,14 @@ window.__ModuleLoader__.load({
             // grid 行已经给了 1fr，但保险起见再按 region 的底边封一次顶：
             // 这样无论 flex 高度能否解析，列表区都能收缩并滚动。
             if (root.style.minHeight) root.style.minHeight = ''
-            if (root.style.height) root.style.height = ''
             if (box.style.maxHeight) box.style.maxHeight = ''
             try {
               const regionRect = region.getBoundingClientRect()
               if (regionRect && regionRect.bottom > 0) {
-                const capped = Math.max(140, Math.round(regionRect.bottom - rect.top - 6))
-                if (root.style.maxHeight !== capped + 'px') root.style.maxHeight = capped + 'px'
+                const avail = Math.max(140, Math.round(regionRect.bottom - rect.top - 4))
+                const px = avail + 'px'
+                if (root.style.height !== px) root.style.height = px
+                if (root.style.maxHeight !== px) root.style.maxHeight = px
                 if (root.style.overflow !== 'hidden') root.style.overflow = 'hidden'
               }
             } catch (err) { /* 拿不到几何就不封顶，交给 grid 行 */ }
@@ -1985,14 +1986,21 @@ window.__ModuleLoader__.load({
         fit()
         const timer = setTimeout(function () { adaptLayout(); fit() }, 60)
         window.addEventListener('resize', fit)
+        window.addEventListener('dsh-project-workspaces:band', fit)
+        const vv = (typeof window !== 'undefined' && window.visualViewport) || null
+        if (vv && typeof vv.addEventListener === 'function') vv.addEventListener('resize', fit)
         let observer = null
         if (typeof ResizeObserver === 'function' && rootRef.current) {
           observer = new ResizeObserver(function () { fit() })
           observer.observe(rootRef.current)
+          const parent = rootRef.current.parentElement
+          if (parent) observer.observe(parent)
         }
         return function () {
           clearTimeout(timer)
           window.removeEventListener('resize', fit)
+          window.removeEventListener('dsh-project-workspaces:band', fit)
+          if (vv && typeof vv.removeEventListener === 'function') vv.removeEventListener('resize', fit)
           if (observer) observer.disconnect()
           while (undo.length) {
             const restore = undo.pop()
@@ -3417,7 +3425,10 @@ window.__ModuleLoader__.load({
             const hr = header.getBoundingClientRect()
             if (!hr || !hr.width) return
             setBox({ left: Math.round(hr.left), top: Math.round(hr.top), width: Math.round(hr.width), header: header })
-            try { document.documentElement.style.setProperty('--sbw-band-h', BAND_HEIGHT + 'px') } catch (err) { void err }
+            try {
+              document.documentElement.style.setProperty('--sbw-band-h', BAND_HEIGHT + 'px')
+              window.dispatchEvent(new CustomEvent('dsh-project-workspaces:band', { detail: { height: BAND_HEIGHT } }))
+            } catch (err) { void err }
           }
           measure()
           const timer = setTimeout(measure, 80)
