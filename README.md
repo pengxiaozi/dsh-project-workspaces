@@ -1,18 +1,11 @@
 # dsh-project-workspaces
 
-把项目根目录下的子目录注册成 DSH 原生 Workspace，并用一个**极简**的侧边栏把它们组织成
-「项目 → 子工作区 → 会话」三层。
+[DeepSeek Harness](https://github.com/deepseek-ai) 插件：一个插件搞定「项目 → 子工作区」——把项目根目录下的直接子目录注册成 DSH 原生 Workspace，记录项目层级，并**用侧边栏替换掉原生左侧工作区区域**（项目 → 子工作区 → 会话），标题栏的 `＋` 就是「新建项目」弹窗。
 
-## 只用这些
+- 宿主半边（`lib/index.js`）：`DSH_HOME/project-workspaces.json` 里的层级 + `/dsh-project-workspaces/*` HTTP 路由
+- 客户端半边（`client/client.js`）：`sidebar.workspaces`（priority -100）、`settings.section`（设置 → 项目工作区）、`shell.overlay`（新增工作区 / 编辑弹窗）
 
-- 侧边栏只有项目行、子工作区行、会话行；点项目行折叠/展开，点工作区行展开会话
-- 标题栏：「工作区」+ 搜索 + `＋ 新建项目` + `⟳ 刷新`
-- 会话行：点开、重命名、导出、归档（归档只是从侧边栏移走，不删磁盘、可在 DSH 里恢复）
-- 顶部会话标签条（`conversation.header.leading`）：最近打开的会话排一行，点击切换、点 × 只从标签栏移除，末尾 ≡ / Ctrl+K 打开会话搜索
-- 设置 → 项目工作区：新建/编辑项目、别名、标签、颜色、打开目录、移除项目、按父目录归组、会话归属补齐
-
-已移除：项目卡片、目录树折叠、状态角标、标签筛选、全部会话平铺视图（顶部会话标签条保留）。
-
+- **会话标签条（独立一条）**：对话区最上方单独一条，把最近打开的会话排成标签；点击切换、hover 出现 `×` 只从标签栏移除（不归档/不删除会话）；末尾 `≡` 或 `Ctrl+K` 打开会话搜索面板。真实标题栏会被整体下移 36px（`marginTop`），标签最多 8 个、按最近使用排序、持久化在 `localStorage` 的 `dsh-project-workspaces:tabs`
 
 ## 安装
 
