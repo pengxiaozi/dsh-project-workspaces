@@ -1425,7 +1425,7 @@ window.__ModuleLoader__.load({
         if (title.indexOf(' / ') >= 0) return title.split(' / ').pop()
         return baseName(ws.path || '')
       }
-      function cardSessionRow(item, key) {
+      function cardSessionRow(item, key, showHint) {
         const id = item.id
         const summary = item.summary || summaries[id]
         const label = sessionLabel(summary, id)
@@ -1441,6 +1441,9 @@ window.__ModuleLoader__.load({
         },
           h('span', { className: 'sbw-slot' }, statusDot(state)),
           h('span', { className: 'sbw-title' }, label),
+          showHint && item.ws
+            ? h('span', { className: 'sbw-ws-hint', style: { flex: 'none', maxWidth: '34%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px', lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary)' }, title: '所属工作区：' + item.ws.path }, wsShort(item.ws))
+            : null,
           h('span', { className: 'sbw-time' }, formatRelative(sessionStamp(summary, id))),
           h('span', { className: 'sbw-actions' },
             h('button', { className: 'sbw-mini', title: '导出这个会话', onClick: function (e) { e.stopPropagation(); exportSessions([item.ws], label) } }, glyph('IconDownloadOutlineRegular', 14, '⇩'))
@@ -1628,7 +1631,7 @@ window.__ModuleLoader__.load({
                 })())
                 : null,
               shown.length
-                ? h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id) }))
+                ? h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id, subs.length + (project.selfWs ? 1 : 0) > 1) }))
                 : h('div', { className: 'sbw-card-empty' }, '暂无会话'),
               rest > 0
                 ? h('button', {
@@ -2122,6 +2125,8 @@ window.__ModuleLoader__.load({
       exportSessions: '/dsh-project-workspaces/export',
       ui: '/dsh-project-workspaces/ui',
       tempSession: '/dsh-project-workspaces/temp-session',
+      orphans: '/dsh-project-workspaces/sessions/orphans',
+      orphanFix: '/dsh-project-workspaces/sessions/orphans/fix',
       open: '/dsh-project-workspaces/open',
       autoGroup: '/dsh-project-workspaces/project/auto-group'
     }
@@ -2223,6 +2228,9 @@ window.__ModuleLoader__.load({
       '.pw-color-line{display:flex;align-items:center;gap:8px;min-width:0}' +
       '.pw-color-line input[type=color]{flex:none;width:32px;height:32px;padding:0;border:0.5px solid var(--dsw-alias-border-l4,rgba(127,127,127,.4));border-radius:8px;background:transparent;cursor:pointer}' +
       '.pw-row-wrap{flex-wrap:wrap}' +
+      '.pw-orphans{display:flex;flex-direction:column;gap:2px;max-height:180px;overflow-y:auto;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));border-radius:10px;padding:4px}' +
+      '.pw-orphan{display:flex;align-items:center;gap:8px;min-height:26px;padding:0 6px;border-radius:6px;font-size:12px}' +
+      '.pw-orphan-path{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-secondary)}' +
       '.pw-preview{display:flex;align-items:center;gap:8px;height:32px;margin-top:10px;padding:0 10px;border-radius:var(--dsw-radius-md,12px);font-size:13px;color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 10%,transparent)}' +
       '.pw-preview-dot{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary,#4d6bfe)}' +
       '.pw-sess-list{max-height:min(46vh,420px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));border-radius:var(--dsw-radius-md,12px)}' +
@@ -3010,6 +3018,13 @@ window.__ModuleLoader__.load({
       }))
     }
 
+    // 面板里做路径缩写（与侧边栏 shortPath 同规则，那个在 SidebarBrowser 作用域内）
+    function shortPathText(target) {
+      const parts = String(target || '').replace(/\\/g, '/').split('/').filter(Boolean)
+      if (parts.length <= 2) return String(target || '')
+      return '…/' + parts.slice(-2).join('/')
+    }
+
     function Panel(props) {
       ensureStyle()
       const [state, setState] = useState(null)
@@ -3019,8 +3034,26 @@ window.__ModuleLoader__.load({
       const [dialog, setDialog] = useState(false)
       const [error, setError] = useState('')
       const [message, setMessage] = useState('')
+      const [orphans, setOrphans] = useState(null)
+      async function loadOrphans() {
+        try {
+          const body = await request(API.orphans)
+          setOrphans(body && body.ok ? (body.items || []) : [])
+        } catch (err) { setOrphans([]) }
+      }
+      async function fixOrphans() {
+        if (!orphans || !orphans.length) return
+        setBusy(true); setError(''); setMessage('')
+        try {
+          const body = await postJson(API.orphanFix, { cwds: orphans.map(function (item) { return item.cwd }) })
+          setState(body.state)
+          setMessage('已补齐 ' + ((body.created || []).length) + ' 个目录')
+          setOrphans([])
+          notifyChanged()
+        } catch (err) { setError(errorText(err)) } finally { setBusy(false) }
+      }
       async function load() {
-        try { setState(await request(API.state)); setError('') } catch (err) { setError(errorText(err)) }
+        try { setState(await request(API.state)); setError(''); loadOrphans() } catch (err) { setError(errorText(err)) }
       }
       useEffect(function () { load() }, [])
       async function scan() {
@@ -3127,6 +3160,21 @@ window.__ModuleLoader__.load({
           )
         ),
         h('div', { className: 'pw-card' },
+          h('h3', null, '会话归属（有会话、但目录还不是工作区）'),
+          orphans === null
+            ? h('div', { className: 'pw-muted' }, '正在检查…')
+            : orphans.length
+              ? h(React.Fragment, null,
+                h('div', { className: 'pw-muted' }, '这些目录里有会话，但目录本身没有注册成工作区，所以侧边栏里看不到它们。'),
+                h('div', { className: 'pw-orphans' }, orphans.slice(0, 8).map(function (item) {
+                  return h('div', { key: 'orph:' + item.cwd, className: 'pw-orphan', title: item.cwd },
+                    h('span', { className: 'pw-orphan-path' }, shortPathText(item.cwd)),
+                    h('span', { className: 'pw-tag' }, item.count + ' 个会话'))
+                })),
+                orphans.length > 8 ? h('div', { className: 'pw-muted' }, '还有 ' + (orphans.length - 8) + ' 个目录…') : null,
+                h('button', { className: 'pw-btn primary', disabled: busy, onClick: fixOrphans }, '一键补齐（注册为工作区并归入项目）')
+              )
+              : h('div', { className: 'pw-muted' }, '所有有会话的目录都已注册成工作区 👍'),
           h('h3', null, '项目（根目录 → 子工作区）'),
           projects.length
             ? h('div', { className: 'pw-list' }, projects.map(function (project) {
