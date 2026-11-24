@@ -35,7 +35,7 @@ window.__ModuleLoader__.load({
     }
     // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
     const SIDEBAR_CSS = [
-      '.sbw{--sbw-toolbar-height:36px;position:relative;z-index:1;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
+      '.sbw{--sbw-toolbar-height:36px;position:relative;z-index:1;flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
       // 照抄原生 WorkspaceBrowser：侧边栏把工作区区域包在 container-type:size 里，
       // 用 100cqh 取「这块区域的一屏高」，不依赖祖先有没有确定高度。
       '.sbw-region{display:flex;flex-direction:column;min-height:0;height:100%}',
@@ -298,6 +298,7 @@ window.__ModuleLoader__.load({
     }
     function useCompletionToasts() {
       const [items, setItems] = useState([])
+      const [held, setHeld] = useState('')
       useEffect(function () {
         function listener(payload) {
           setItems(function (prev) {
@@ -310,14 +311,16 @@ window.__ModuleLoader__.load({
       }, [])
       useEffect(function () {
         if (!items.length) return undefined
-        const timers = items.map(function (item) {
-          return setTimeout(function () {
-            setItems(function (prev) { return prev.filter(function (next) { return next.key !== item.key }) })
-          }, 6000)
-        })
+        const timers = items
+          .filter(function (item) { return item.key !== held })
+          .map(function (item) {
+            return setTimeout(function () {
+              setItems(function (prev) { return prev.filter(function (next) { return next.key !== item.key }) })
+            }, 10000)
+          })
         return function () { timers.forEach(clearTimeout) }
-      }, [items])
-      return [items, setItems]
+      }, [items, held])
+      return [items, setItems, held, setHeld]
     }
     // 会话列表弹窗总线：点某个目录的图标就能把该目录下的会话摊开成一个列表
     const sessionListListeners = new Set()
@@ -706,6 +709,9 @@ window.__ModuleLoader__.load({
           const summary = summaries[id]
           const title = summary ? sessionLabel(summary) : '会话 ' + id.slice(0, 8)
           if (snapshot.unread && !before.unread) {
+            notifyCompletion({ key: id + ':done:' + Date.now(), sessionId: id, title: title, kind: 'done' })
+          } else if (before.running && !snapshot.running) {
+            // 主视图里的会话不会置 completionUnread，靠 running 由 true 变 false 兜底
             notifyCompletion({ key: id + ':done:' + Date.now(), sessionId: id, title: title, kind: 'done' })
           }
           if (snapshot.pending && snapshot.pending !== before.pending) {
@@ -1586,8 +1592,12 @@ window.__ModuleLoader__.load({
             }
             el = parent
           }
-          if (root.dataset && root.parentElement && root.parentElement.classList.contains('sbw-region')) {
+          if (root.parentElement && root.parentElement.classList.contains('sbw-region')) {
+            // 交给 grid 行（1fr）撑开，别留下手工算出的 min/maxHeight，否则会把列表卡死
             if (root.style.minHeight) root.style.minHeight = ''
+            if (root.style.height) root.style.height = ''
+            if (root.style.maxHeight) root.style.maxHeight = ''
+            if (box.style.maxHeight) box.style.maxHeight = ''
             debugFit.total = 0
             debugFit.limit = Math.round(limit)
             debugFit.top = Math.round(rect.top)
@@ -2495,6 +2505,8 @@ window.__ModuleLoader__.load({
       const pair = useCompletionToasts()
       const items = pair[0]
       const setItems = pair[1]
+      const held = pair[2]
+      const setHeld = pair[3]
       if (!items.length) return null
       return h('div', { className: 'pw-toasts' }, items.map(function (item) {
         const done = item.kind !== 'warning'
@@ -2502,6 +2514,8 @@ window.__ModuleLoader__.load({
           key: item.key,
           className: 'pw-toast',
           title: done ? '点击打开这个会话' : '点击去处理这个会话',
+          onMouseEnter: function () { setHeld(item.key) },
+          onMouseLeave: function () { setHeld(function (prev) { return prev === item.key ? '' : prev }) },
           onClick: function () {
             setItems(function (prev) { return prev.filter(function (next) { return next.key !== item.key }) })
             try {
