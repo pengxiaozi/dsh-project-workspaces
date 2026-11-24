@@ -215,6 +215,29 @@ test('会话列表弹窗：session 快照缺 workspaceId 时仍能列出该工�
   assert.ok(!subtitle.includes('0 个会话'), '不应显示 0 个会话：' + subtitle.slice(0, 200))
 })
 
+test('会话列表弹窗：原生快照只有 {ids, byId} 没有 items 时也要列出会话', async () => {
+  const sessions = [{ id: 's1', sessionId: 's1', title: '会话一', workspaceId: 'w-web' }]
+  const byId = { s1: sessions[0] }
+  const snapshot = { ids: ['s1'], byId, phase: 'idle' }
+  const env = makeEnv({ sessions, workspaces: [] })
+  global.fetch = stubFetch(PROJECT_STATE)
+  let overlay
+  TR.act(() => {
+    overlay = TR.create(React.createElement(env.overlay.component, {
+      services: {
+        sessions: { list: { getSnapshot() { return snapshot }, subscribe() { return () => {} } } },
+        workspaces: { list: listOf([]) },
+        uiWorkspace: { openSession() {}, async archiveSession() {} },
+      },
+    }))
+  })
+  await flush()
+  const api = env.sandbox.window.__dshProjectWorkspaces
+  TR.act(() => { api.openSessionList({ title: 'web', wsIds: ['w-web'], sessionIds: ['s1'] }) })
+  await flush()
+  assert.equal(findByClass(overlay, 'pw-sess-row').length, 1, 'ids/byId 形态的快照也应列出 1 条会话')
+})
+
 test('挂载时没有可用布局祖先也不会抛错（防回归：量高逻辑崩溃）', async () => {
   const env = makeEnv()
   global.fetch = stubFetch(PROJECT_STATE)

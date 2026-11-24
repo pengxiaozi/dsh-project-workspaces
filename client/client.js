@@ -216,6 +216,25 @@ window.__ModuleLoader__.load({
       const fluentIcon = fluent(name, size)
       return fluentIcon || text
     }
+    // 原生 conversations 快照是 { ids, byId, phase }（没有 items），
+    // 统一在这里转成数组，避免各处按 items 过滤导致「0 个会话」。
+    function sessionsOfSnapshot(snap) {
+      if (!snap) return []
+      if (Array.isArray(snap.items) && snap.items.length) return snap.items.slice()
+      const byId = snap.byId || null
+      if (byId) {
+        const ids = Array.isArray(snap.ids) ? snap.ids : Object.keys(byId)
+        const out = []
+        ids.forEach(function (id) {
+          const item = byId[String(id)]
+          if (item) out.push(item)
+        })
+        if (out.length) return out
+        return Object.keys(byId).map(function (id) { return byId[id] }).filter(Boolean)
+      }
+      return []
+    }
+
     function useSnapshot(source) {
       const [snap, setSnap] = useState(function () { return source && source.getSnapshot ? source.getSnapshot() : {} })
       useEffect(function () {
@@ -2822,7 +2841,7 @@ window.__ModuleLoader__.load({
           if (ui && typeof ui.startSession === 'function') ui.startSession(workspace.workspaceId)
         } })
       })
-      ;(((sessionSnap && sessionSnap.byId) ? Object.keys(sessionSnap.byId).map(function (id) { return sessionSnap.byId[id] }) : ((sessionSnap && sessionSnap.items) || []))).forEach(function (summary) {
+      ;sessionsOfSnapshot(sessionSnap).forEach(function (summary) {
         if (!summary || !summary.id) return
         push({ key: 's:' + summary.id, kind: '会话', label: sessionLabel(summary), hint: summary.workspaceId || '', run: function () {
           noteOpened(summary.id)
@@ -2886,7 +2905,7 @@ window.__ModuleLoader__.load({
       if (!seed) return null
       const wantedWs = (seed.wsIds || []).map(String)
       const wantedIds = (seed.sessionIds || []).map(String)
-      const all = (snapshot.items || []).filter(function (item) {
+      const all = sessionsOfSnapshot(snapshot).filter(function (item) {
         if (!wantedWs.length && !wantedIds.length) return true
         if (wantedIds.length && wantedIds.indexOf(String(item.id)) >= 0) return true
         return wantedWs.length > 0 && wantedWs.indexOf(String(item.workspaceId)) >= 0
