@@ -1868,7 +1868,10 @@ window.__ModuleLoader__.load({
     '.pw-toast-title{font-size:13px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
     '.pw-toast-sub{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
     '.pw-modal{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.28))}' +
-      '.pw-modal-card{display:flex;flex-direction:column;gap:16px;width:min(560px,calc(100vw - 48px));max-height:min(86vh,760px);overflow:hidden;box-sizing:border-box;padding:20px 22px 16px;border-radius:var(--dsw-radius-xl,20px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));box-shadow:0 24px 64px rgba(0,0,0,.22),0 2px 8px rgba(0,0,0,.08);font-family:var(--dsw-font-family,inherit)}' +
+      '.pw-modal-card{display:flex;flex-direction:column;gap:16px;width:min(620px,calc(100vw - 48px));max-height:min(86vh,760px);overflow:hidden;box-sizing:border-box;padding:20px 22px 16px;border-radius:var(--dsw-radius-xl,20px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));box-shadow:0 24px 64px rgba(0,0,0,.22),0 2px 8px rgba(0,0,0,.08);font-family:var(--dsw-font-family,inherit)}' +
+    '.pw-modal-card.sm{width:min(520px,calc(100vw - 48px));min-height:300px}' +
+    '.pw-modal-card.lg{height:min(86vh,620px)}' +
+    '.pw-modal-body-scroll{scrollbar-gutter:stable}' +
       '.pw-modal-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}' +
       '.pw-modal-title{margin:0 0 2px;font-size:16px;line-height:22px;font-weight:600}' +
       '.pw-modal-sub{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
@@ -1884,7 +1887,7 @@ window.__ModuleLoader__.load({
       '.pw-step-text{flex:none;font-size:12px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-primary)}' +
       '.pw-step-hint{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
       '.pw-scanline{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}' +
-      '.pw-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:16px;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}' +
+      '.pw-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:16px;overflow-y:auto;overscroll-behavior:contain;padding-right:2px;scrollbar-gutter:stable}' +
       '.pw-summary{display:flex;flex-direction:column;gap:4px;margin-top:2px;padding:8px 10px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));border-radius:var(--dsw-radius-md,12px);background:var(--dsw-alias-bg-layer-1,transparent)}' +
       '.pw-summary-line{display:flex;gap:8px;font-size:12px;line-height:18px}' +
       '.pw-summary-key{flex:none;width:44px;color:var(--dsw-alias-label-tertiary)}' +
@@ -2114,7 +2117,7 @@ window.__ModuleLoader__.load({
         close()
       }
       return h('div', { className: 'pw-modal', onClick: function (event) { backdropClick(event, props.onClose) } },
-        h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+        h('div', { className: 'pw-modal-card lg', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
               h('h3', { className: 'pw-modal-title' }, props.title || '新建项目'),
@@ -2250,7 +2253,7 @@ window.__ModuleLoader__.load({
         close()
       }
       return h('div', { className: 'pw-modal', onClick: function (event) { backdropClick(event, props.onClose) } },
-        h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+        h('div', { className: 'pw-modal-card sm', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
               h('h3', { className: 'pw-modal-title' }, child ? '编辑子工作区' : '编辑项目'),
@@ -2443,7 +2446,7 @@ window.__ModuleLoader__.load({
       const sorted = list.slice().sort(function (a, b) { return sessionStamp(b) - sessionStamp(a) })
       function close() { setSeed(null) }
       return h('div', { className: 'pw-modal', onClick: close },
-        h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+        h('div', { className: 'pw-modal-card sm', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
               h('h3', { className: 'pw-modal-title' }, seed.title || '会话'),
@@ -2518,7 +2521,7 @@ window.__ModuleLoader__.load({
       } else if (editSeed) {
         if (editData && editData.error) {
           dialog = h('div', { className: 'pw-modal', onClick: function () { setEditSeed(null) } },
-            h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+            h('div', { className: 'pw-modal-card sm', onClick: function (e) { e.stopPropagation() } },
               h('div', { className: 'pw-modal-head' },
                 h('div', null, h('h3', { className: 'pw-modal-title' }, '编辑目录')),
                 h('button', { className: 'pw-close', title: '关闭', onClick: function () { setEditSeed(null) } }, glyph('IconCloseOutlineRegular', 16, '\u00D7'))
@@ -2536,7 +2539,7 @@ window.__ModuleLoader__.load({
         } else {
           // 还在读 state：先撑一个「载入中」的卡片，别让弹窗闪一下又消失
           dialog = h('div', { className: 'pw-modal', onClick: function () { setEditSeed(null) } },
-            h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+            h('div', { className: 'pw-modal-card sm', onClick: function (e) { e.stopPropagation() } },
               h('div', { className: 'pw-modal-head' },
                 h('div', null, h('h3', { className: 'pw-modal-title' }, '编辑目录')),
                 h('button', { className: 'pw-close', title: '关闭', onClick: function () { setEditSeed(null) } }, glyph('IconCloseOutlineRegular', 16, '\u00D7'))
