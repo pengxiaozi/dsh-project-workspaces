@@ -1451,8 +1451,24 @@ window.__ModuleLoader__.load({
           if (!rect || !rect.top) return
           const viewport = (typeof window !== 'undefined' && window.innerHeight) || 0
           if (!viewport) return
-          const bottomGap = 18
-          const available = Math.max(140, Math.round(viewport - rect.top - bottomGap))
+          // 关键：可用高度要取「视口底部」和「侧边栏容器底部」里更小的那个。
+          // 只看视口的话，滚动条会伸到容器外面，被父级裁掉一半，看上去就是「只能滚一半」。
+          let limit = viewport
+          // 往上找一层「结束位置在视口之内的祖先」，那就是侧边栏区域真正的底边。
+          // 自己（.sbw）的高度是内容撑开的，拿它当底边会形成循环，所以从父级开始找。
+          let el = rootRef.current
+          for (let i = 0; i < 5 && el; i += 1) {
+            const parent = el.parentElement
+            if (!parent || typeof parent.getBoundingClientRect !== 'function') break
+            const parentRect = parent.getBoundingClientRect()
+            if (parentRect && parentRect.bottom > 0 && parentRect.bottom < viewport - 1) {
+              limit = Math.min(limit, parentRect.bottom)
+              break
+            }
+            el = parent
+          }
+          const bottomGap = 10
+          const available = Math.max(120, Math.round(limit - rect.top - bottomGap))
           if (available > 0) box.style.maxHeight = available + 'px'
         }
         fit()
@@ -1468,7 +1484,7 @@ window.__ModuleLoader__.load({
           window.removeEventListener('resize', fit)
           if (observer) observer.disconnect()
         }
-      }, [])
+      }, [loaded, searchOpen, tagFilter, Boolean(tree), activeTabs.length])
 
       const uiSettings = uiConfig || {}
       const uiVars = {}
