@@ -636,6 +636,35 @@ window.__ModuleLoader__.load({
       // 快照给不出「当前会话」时，用最近一次手动打开的会话兜底，保证始终有一行处于选中态
       const currentId = activeSessionId || String(lastPicked || '')
       const projects = Array.isArray(tree) ? mapProjects(tree, wsItems) : null
+      // 落在项目根目录下、但还没写进项目里（老数据 / 后来手动加的工作区）→ 渲染时自动挂到该项目下面，
+      // 免得同一条目录树被拆成「项目里一部分 + 下面平铺一部分」。
+      if (projects) {
+        const claimed = new Set()
+        projects.forEach(function (project) {
+          if (project.selfWs) claimed.add(String(project.selfWs.workspaceId))
+          project.children.forEach(function (item) { if (item.ws) claimed.add(String(item.ws.workspaceId)) })
+        })
+        wsItems.forEach(function (ws) {
+          const wsId = String(ws.workspaceId)
+          if (claimed.has(wsId)) return
+          const target = normalizePath(ws.path)
+          let best = null
+          let bestLen = -1
+          projects.forEach(function (project) {
+            const root = normalizePath(project.path)
+            if (!root || target === root) return
+            if (target.indexOf(root + '/') !== 0) return
+            if (root.length > bestLen) { best = project; bestLen = root.length }
+          })
+          if (!best) return
+          const segs = relSegments(best.path, ws.path)
+          best.children.push({
+            child: { name: segs.join('/') || baseName(ws.path), path: ws.path, alias: '', tags: [], auto: true },
+            ws: ws,
+          })
+          claimed.add(wsId)
+        })
+      }
       const legacy = buildGroups(wsItems)
       // 没归入任何项目的 Workspace 平铺在项目后面，直接按工作区行显示（不再有「其他 Workspace」分组标题）
       const covered = new Set()
