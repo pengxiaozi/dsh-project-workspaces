@@ -1470,7 +1470,9 @@ window.__ModuleLoader__.load({
       }
       // 卡片里的目录树：完全按相对项目根的路径分层，不再像旧实现那样压平
       function cardTree(project) {
-        const root = { name: project.name || project.root, path: project.path || project.root, children: new Map(), item: null }
+        const rootPath = project.path || project.root
+        const root = { name: '(根目录)', path: rootPath, children: new Map(), item: null }
+        if (project.selfWs) root.item = { child: { name: '(根目录)', path: rootPath, alias: '', tags: [] }, ws: project.selfWs }
         for (const item of project.children) {
           const segs = relSegments(project.path || project.root, item.child.path)
           if (!segs.length) continue
@@ -1510,6 +1512,22 @@ window.__ModuleLoader__.load({
         return Array.from(new Set(ids))
       }
 
+      // 在某个子目录里开会话：没有对应工作区时先注册，再开
+      async function sessionInDir(project, node) {
+        setError('')
+        try {
+          if (node.item && node.item.ws) { newSession(node.item.ws); return }
+          const root = project.path || project.root
+          const rel = relSegments(root, node.path).join('/')
+          if (!rel) { setError('这个目录就在项目根下，请用项目行的「＋」'); return }
+          const body = await postJson(API.project, { root: root, name: project.name || '', children: [rel] })
+          if (body && body.state) setTree(body.state.projects || [])
+          const ws = ((body && body.state && body.state.workspaces) || []).filter(function (item) { return normalizePath(item.path) === normalizePath(node.path) })[0]
+          if (ws) newSession(ws)
+          else setError('已注册，但没找到对应工作区，刷新后再试')
+        } catch (err) { setError(String(err && err.message ? err.message : err)) }
+      }
+
       function cardDirRow(node, key, level, project) {
         const hasKids = node.children.size > 0
         const open = cardDirs[key] === true
@@ -1532,13 +1550,19 @@ window.__ModuleLoader__.load({
             h('span', { style: { flex: 'none', color: 'var(--dsw-alias-label-tertiary)' } }, glyph(open ? 'IconFolderOpenRegular' : 'IconFolderCloseRegular', 14, '▤')),
             h('span', { className: 'sbw-card-dir-name', style: CARD_STYLE.dirName }, label),
             state ? statusDot(state) : null,
-            h('span', { style: CARD_STYLE.dirCount, title: hasKids ? '该目录下的工作区数量' : '该目录的会话数量' }, hasKids ? String(cardTreeCount(node)) : String(cardTreeSessionIds(node).length))
+            h('span', { style: CARD_STYLE.dirCount, title: hasKids ? '该目录下的工作区数量' : '该目录的会话数量' }, hasKids ? String(cardTreeCount(node)) : String(cardTreeSessionIds(node).length)),
+            h('button', {
+              className: 'sbw-mini sbw-card-add',
+              style: { flex: 'none', width: '20px', height: '20px', marginLeft: '2px' },
+              title: '在「' + label + '」里新建会话',
+              onClick: function (e) { e.stopPropagation(); sessionInDir(project, node) },
+            }, glyph('IconNewChatOutlineRegular', 13, '＋'))
           ),
         ]
         if (open && hasKids) {
           for (const entry of node.children) rows.push(cardDirRow(entry[1], key + '/' + entry[0], level + 1, project))
         }
-        if (open && !hasKids && node.item && node.item.ws) {
+        if (open && node.item && node.item.ws) {
           const ids = cardTreeSessionIds(node)
           const list = ids.map(function (id) { return summaries[id] }).filter(Boolean)
           list.sort(function (a, b) { return sessionStamp(b) - sessionStamp(a) })
@@ -1609,10 +1633,10 @@ window.__ModuleLoader__.load({
               h('button', {
                 className: 'sbw-mini sbw-always',
                 style: CARD_STYLE.mini,
-                title: '新建会话',
+                title: project.selfWs ? '在项目根目录新建会话' : '新建会话',
                 onClick: function (e) {
                   e.stopPropagation()
-                  const target = (subs[0] && subs[0].ws) || project.selfWs
+                  const target = project.selfWs || (subs[0] && subs[0].ws)
                   if (target) newSession(target)
                   else openCreateDialog({ root: project.path || project.root, name: project.name || '' })
                 },
@@ -1655,6 +1679,7 @@ window.__ModuleLoader__.load({
               tree
                 ? h('div', { className: 'sbw-card-tree', style: CARD_STYLE.tree }, (function () {
                   const rows = []
+                  if (tree.item) rows.push(cardDirRow(tree, 'cd:' + project.id + '/@root', 0, project))
                   for (const entry of tree.children) rows.push(cardDirRow(entry[1], 'cd:' + project.id + '/' + entry[0], 0, project))
                   return rows
                 })())
