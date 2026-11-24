@@ -38,9 +38,9 @@ window.__ModuleLoader__.load({
       '.sbw{--sbw-toolbar-height:36px;position:relative;z-index:1;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
       // 照抄原生 WorkspaceBrowser：侧边栏把工作区区域包在 container-type:size 里，
       // 用 100cqh 取「这块区域的一屏高」，不依赖祖先有没有确定高度。
-      '.sbw-region{display:flex;flex-direction:column;min-height:0;height:100%}',
-      '.sbw-region > .sbw{overflow:hidden}',
 
+      '.sbw-region{display:flex;flex-direction:column;min-height:0;min-width:0}',
+      '.sbw-region > .sbw{flex:1 1 auto;min-height:0;overflow:hidden}',
       '.sbw-wide{flex:1 1 auto;min-height:0;max-height:none}',
       '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
@@ -56,8 +56,7 @@ window.__ModuleLoader__.load({
       '.sbw-search.open{height:32px;padding:0 4px 0 0;border:.5px solid var(--dsw-alias-border-l4);border-radius:var(--dsw-radius-md,12px);color:var(--dsw-alias-label-caption,var(--dsw-alias-label-tertiary))}',
       '.sbw-search input{flex:1;width:0;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}',
       '.sbw-search input::placeholder{color:var(--dsw-alias-label-tertiary)}',
-      '.sbw-debug{flex:none;padding:2px 12px 4px;font-size:10px;line-height:14px;color:var(--dsw-alias-label-tertiary);border-top:0.5px dashed var(--dsw-alias-border-l2,rgba(127,127,127,.2))}' +
-      '.sbw-scroll{flex:1;min-height:0;display:flex;flex-direction:column}',
+      '.sbw-scroll{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow-x:hidden;overflow-y:auto;scrollbar-gutter:stable}',
       '.sbw-wide .sbw-scroll{display:block;flex:1 1 auto;min-height:0;max-height:none;-webkit-overflow-scrolling:touch;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
       '.sbw-wide .sbw-scroll{touch-action:pan-y}',
       '.sbw-skel{padding:2px 8px}',
@@ -1846,211 +1845,37 @@ window.__ModuleLoader__.load({
       const tempVisible = looseVisible.filter(isTempWs)
       const otherLoose = looseVisible.filter(function (ws) { return !isTempWs(ws) })
       const empty = !hasProjects && !looseVisible.length && !(legacy.length && !tree)
-      // 排查用：localStorage.setItem('DSH_PW_DEBUG','1') 后刷新，侧边栏底部会显示测得的高度
-      const debugFit = React.useRef({ total: 0, limit: 0, top: 0 }).current
-      const showDebug = (function () {
-        try { return window.localStorage && window.localStorage.getItem('DSH_PW_DEBUG') === '1' } catch (err) { return false }
-      })()
       const rootRef = React.useRef(null)
-      // 兜底：不管祖先有没有给出确定高度，都按视口算一次列表可用高度，保证能滚动
+
+      // 侧边栏布局（原生 SidebarRoot.module.css 实测）：
+      //   .scrollArea 是 grid，行模板 = 8px / max-content / 2px / max-content
+      //   第 1、3 行是纯留白行；第 2 行是「插件/自动化任务…」导航；第 4 行就是工作区所在的 .regionArea。
+      // 原生让它 max-content（内容多高就多高），所以我们这里只做一件事：
+      // 把**最后一行**改成 minmax(0, 1fr)，让工作区正好填满「导航之下、页脚之上」的剩余空间，
+      // 列表自己在内部滚动。不量任何几何、不猜行号，因此不会再把上方留白撑大。
       useEffect(function () {
-        // 关键：原生侧边栏里装工作区的那块区域，高度是 grid 的 max-content 行 ——
-        // 由内容撑开。所以「填满」不能只靠量高度（会循环），得把这一行的行高改成 1fr，
-        // 让它去吃剩下的空间；下面的 footer 插件（设置、其他入口）在另一块区域，不受影响。
-        const undo = []
-        // 「工作区」上方如果挂着一个纯占位块（flex-grow>0 且没有文字/子元素），
-        // 内容一少它就把整块区域往下推，看起来像「上面留了一大片空白」。
-        // 这里顺着祖先往上找 3 层，把这种空占位块收掉，并让容器成为伸缩项。
-        function collapseSpacers(el) {
-          let node = el
-          for (let level = 0; level < 3 && node && node.parentElement; level += 1) {
-            const parent = node.parentElement
-            let display = ''
-            try {
-              display = window.getComputedStyle(parent).display
-            } catch (err) {
-              display = ''
-            }
-            if (display === 'flex') {
-              const kids = Array.prototype.slice.call(parent.children)
-              const index = kids.indexOf(node)
-              for (let i = 0; i < index; i += 1) {
-                const sib = kids[i]
-                let sibStyle = null
-                try {
-                  sibStyle = window.getComputedStyle(sib)
-                } catch (err) {
-                  sibStyle = null
-                }
-                if (!sibStyle) continue
-                if ((parseFloat(sibStyle.flexGrow) || 0) <= 0) continue
-                const hasText = String(sib.textContent || '').trim().length > 0
-                if (hasText || sib.childElementCount > 0) continue
-                sib.style.flex = '0 0 auto'
-                undo.push(function () { sib.style.flex = '' })
-              }
-              if (index === kids.length - 1) {
-                node.style.flex = '1 1 auto'
-                node.style.minHeight = '0'
-                node.style.marginTop = '0'
-                undo.push(function () { node.style.flex = ''; node.style.minHeight = ''; node.style.marginTop = '' })
-              }
-            }
-            node = parent
-          }
-        }
-        function adaptLayout() {
-          const rootEl = rootRef.current
-          if (!rootEl) return
-          collapseSpacers(rootEl)
-          let el = rootEl
-          let grid = null
-          let region = null
-          for (let i = 0; i < 6 && el && el.parentElement; i += 1) {
-            const parent = el.parentElement
-            let display = ''
-            try {
-              display = window.getComputedStyle(parent).display
-            } catch (err) {
-              display = ''
-            }
-            if (display === 'grid') {
-              grid = parent
-              region = el
-              break
-            }
-            el = parent
-          }
-          if (!grid || !region || region.dataset.pwRegion === '1') return
-          try {
-            const style = window.getComputedStyle(grid)
-            // 注意：computed 的 grid-template-rows 已经把 max-content 解析成像素了，
-            // 所以要「把最后一行改成 1fr」，只能用解析后的像素列表替换最后一项。
-            const rows = String(style.gridTemplateRows || '').trim().split(/\s+/).filter(Boolean)
-            if (!rows.length) return
-            // 我们的面板必须是这一格里的最后一个子元素，才敢动行高；
-            // 否则下面还挂着别的插件，改了会把它们挤掉。
-            if (grid.lastElementChild !== region) return
-            // 用几何位置判断我们在第几行：把每行的起点累加，找包住 region 顶部的那一行。
-            // （不能盲信「最后一行」——有些布局后面还有空行/隐藏行。）
-            const gridRect = grid.getBoundingClientRect()
-            const regionRect = region.getBoundingClientRect()
-            const gap = parseFloat(style.rowGap) || 0
-            let cursor = gridRect.top + (parseFloat(style.paddingTop) || 0) - (grid.scrollTop || 0)
-            let rowIndex = -1
-            for (let i = 0; i < rows.length; i += 1) {
-              const height = parseFloat(rows[i]) || 0
-              if (regionRect.top >= cursor - 1 && regionRect.top < cursor + height + gap + 1) {
-                rowIndex = i
-                break
-              }
-              cursor += height + gap
-            }
-            if (rowIndex < 0) rowIndex = rows.length - 1
-            const next = rows.slice()
-            next[rowIndex] = '1fr'
-            const previous = grid.style.gridTemplateRows
-            grid.style.gridTemplateRows = next.join(' ')
-            region.dataset.pwRegion = '1'
-            region.classList.add('sbw-region')
-            undo.push(function () {
-              grid.style.gridTemplateRows = previous
-              try { delete region.dataset.pwRegion } catch (err) { region.removeAttribute('data-pw-region') }
-              region.classList.remove('sbw-region')
-            })
-          } catch (err) {
-            // 拿不到布局信息就退回下面的量高兜底
-          }
-        }
-        function fit() {
-          const box = scrollRef.current
-          const root = rootRef.current
-          if (!box || !root) return
-          if (typeof root.getBoundingClientRect !== 'function') return
-          const rect = root.getBoundingClientRect()
-          if (!rect || typeof rect.top !== 'number') return
-          const viewport = (typeof window !== 'undefined' && window.innerHeight) || 0
-          if (!viewport) return
-          // 找最近的「自己有确定高度、并且会滚动」的祖先（原生侧边栏是 .scrollArea：
-          // flex:1 + min-height:0 + overflow-y:auto）。它的高度不由我们的内容决定，
-          // 拿它的底边当可用区域才不会循环。
-          let limit = viewport
-          let el = root
-          for (let i = 0; i < 8 && el; i += 1) {
-            const parent = el.parentElement
-            if (!parent) break
-            const parentRect = parent.getBoundingClientRect()
-            let overflowY = ''
-            try {
-              const style = window.getComputedStyle(parent)
-              overflowY = style.getPropertyValue('overflow-y') || style.overflowY || ''
-            } catch (err) {
-              overflowY = ''
-            }
-            const scrolls = overflowY === 'auto' || overflowY === 'scroll'
-            if (scrolls && parentRect && parentRect.height > 0) {
-              limit = Math.min(viewport, parentRect.bottom)
-              break
-            }
-            el = parent
-          }
-          const region = root.parentElement
-          if (region && region.classList.contains('sbw-region')) {
-            // grid 行已经给了 1fr，但保险起见再按 region 的底边封一次顶：
-            // 这样无论 flex 高度能否解析，列表区都能收缩并滚动。
-            if (root.style.minHeight) root.style.minHeight = ''
-            if (box.style.maxHeight) box.style.maxHeight = ''
-            try {
-              const regionRect = region.getBoundingClientRect()
-              if (regionRect && regionRect.bottom > 0) {
-                const avail = Math.max(140, Math.round(regionRect.bottom - rect.top - 4))
-                const px = avail + 'px'
-                if (root.style.height !== px) root.style.height = px
-                if (root.style.maxHeight !== px) root.style.maxHeight = px
-                if (root.style.overflow !== 'hidden') root.style.overflow = 'hidden'
-              }
-            } catch (err) { /* 拿不到几何就不封顶，交给 grid 行 */ }
-            debugFit.total = 0
-            debugFit.limit = Math.round(limit)
-            debugFit.top = Math.round(rect.top)
-            return
-          }
-          const total = Math.max(160, Math.round(limit - rect.top - 4))
-          if (total > 0) {
-            if (root.style.minHeight) root.style.minHeight = ''
-            if (root.style.maxHeight !== total + 'px') root.style.maxHeight = total + 'px'
-            if (root.style.overflow !== 'hidden') root.style.overflow = 'hidden'
-          }
-          debugFit.total = total
-          debugFit.limit = Math.round(limit)
-          debugFit.top = Math.round(rect.top)
-        }
-        adaptLayout()
-        fit()
-        const timer = setTimeout(function () { adaptLayout(); fit() }, 60)
-        window.addEventListener('resize', fit)
-        window.addEventListener('dsh-project-workspaces:band', fit)
-        const vv = (typeof window !== 'undefined' && window.visualViewport) || null
-        if (vv && typeof vv.addEventListener === 'function') vv.addEventListener('resize', fit)
-        let observer = null
-        if (typeof ResizeObserver === 'function' && rootRef.current) {
-          observer = new ResizeObserver(function () { fit() })
-          observer.observe(rootRef.current)
-          const parent = rootRef.current.parentElement
-          if (parent) observer.observe(parent)
-        }
+        const root = rootRef.current
+        const region = root && root.parentElement
+        const grid = region && region.parentElement
+        if (!grid || typeof window === 'undefined') return undefined
+        let style = null
+        try { style = window.getComputedStyle(grid) } catch (err) { return undefined }
+        if (!style || style.display !== 'grid') return undefined
+        // 只有当我们确实是 grid 的最后一个格子时才动行模板，避免挤到别的插件
+        if (grid.lastElementChild !== region) return undefined
+        const rows = String(style.gridTemplateRows || '').trim().split(/\s+/).filter(Boolean)
+        if (rows.length < 2) return undefined
+        const previous = grid.style.gridTemplateRows
+        const next = rows.slice()
+        next[next.length - 1] = 'minmax(0, 1fr)'
+        grid.style.gridTemplateRows = next.join(' ')
+        try { region.classList.add('sbw-region') } catch (err) { void err }
         return function () {
-          clearTimeout(timer)
-          window.removeEventListener('resize', fit)
-          window.removeEventListener('dsh-project-workspaces:band', fit)
-          if (vv && typeof vv.removeEventListener === 'function') vv.removeEventListener('resize', fit)
-          if (observer) observer.disconnect()
-          while (undo.length) {
-            const restore = undo.pop()
-            try { restore() } catch (err) { /* 忽略 */ }
-          }
+          grid.style.gridTemplateRows = previous
+          try { region.classList.remove('sbw-region') } catch (err) { void err }
         }
       }, [loaded, searchOpen, tagFilter, Boolean(tree), activeTabs.length])
+
 
       const uiSettings = uiConfig || {}
       const uiVars = {}
@@ -2155,9 +1980,6 @@ window.__ModuleLoader__.load({
         tagFilter
           ? h('div', { className: 'sbw-filter-hint' }, '只看「' + tagFilter + '」：' + taggedProjects.length + ' / ' + (projects || []).length + ' 个项目',
             h('button', { className: 'sbw-filter-clear', onClick: function () { setTagFilter('') } }, '显示全部'))
-          : null,
-        showDebug
-          ? h('div', { className: 'sbw-debug' }, 'minH=' + debugFit.total + ' · limit=' + debugFit.limit + ' · top=' + debugFit.top + ' · viewport=' + ((typeof window !== 'undefined' && window.innerHeight) || 0))
           : null,
         h('div', { className: 'sbw-scroll', ref: scrollRef },
           h('div', { className: 'sbw-list' + (flatMode ? ' flat' : '') },
