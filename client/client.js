@@ -1392,63 +1392,87 @@ window.__ModuleLoader__.load({
           rollup.unread ? h('button', { className: 'sbw-roll-item sbw-roll-btn', title: '打开已完成的会话', onClick: function (e) { rollupPick(rollup.unreadIds, e) } }, statusDot('done'), String(rollup.unread)) : null
         )
       }
-      function projectNode(project) {
-        const rootOpen = isRootOpen(project.id)
-        const children = project.children.filter(function (item) {
-          if (!needle) return true
-          if (String(item.child.name).toLowerCase().indexOf(needle) >= 0) return true
-          const ws = item.ws
-          if (!ws) return false
-          return sessionIdsOf(ws).some(matchesSession)
-        })
-        if (needle && !children.length && String(project.root + ' ' + project.path).toLowerCase().indexOf(needle) < 0) return null
-        const open = needle ? true : (rootOpen || Boolean(project.selfWs && currentId && sessionIdsOf(project.selfWs).map(String).indexOf(currentId) >= 0))
-        // 叶子项目：项目根目录自身就是一个 Workspace，没有再细分的子工作区
-        if (!project.children.length && project.selfWs) {
-          const ws = project.selfWs
-          return h('div', { key: project.id },
-            rowShell({
-              className: projectRowClass(project, 'sbw-row sbw-ws sbw-leaf'),
-              title: withActivity(ws.path, wsActivity(ws)),
-              open: open,
-              color: project.color,
-              activity: wsActivity(ws),
-              onFolderClick: function () { openSessionList({ title: displayName(project.root, project.alias), wsIds: wsIdsOf([ws]) }) },
-              style: { '--sbw-indent': '0px' },
-              drag: projectDragProps(project),
-              onClick: function () { toggleRoot(project.id) },
-              text: h('span', { className: 'sbw-text' },
-                h('span', { className: 'sbw-title' }, displayName(project.root, project.alias)),
-                tagChips(project.tags),
-                rollupBadge(projectRollup(project))
-              ),
-              actions: h('span', { className: 'sbw-actions' },
-                h('button', { className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''), title: project.pinned ? '取消置顶' : '置顶项目', onClick: function (e) { e.stopPropagation(); togglePin(project) } }, glyph('IconPinOutlineRegular', 14, '📌')),
-                h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
-                h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
-                h('button', { className: 'sbw-mini', title: '新建会话', onClick: function (e) { e.stopPropagation(); newSession(ws) } }, glyph('IconNewChatOutlineRegular', 14, '＋')),
-                h('button', { className: 'sbw-mini', title: '导出该项目的全部会话', onClick: function (e) { e.stopPropagation(); exportSessions([ws], project.name || project.root) } }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
-                h('button', { className: 'sbw-mini sbw-danger', title: '删除工作区', onClick: function (e) { e.stopPropagation(); removeWorkspace(ws, project.root) } }, glyph('IconTrashOutlineRegular', 14, '删'))
-              ),
-            }),
-            open ? h('div', { className: 'sbw-branch', style: { '--sbw-guide': '20px' } }, sessionRows(ws, project.id, 1)) : null
-          )
+      function shortPath(target) {
+        const norm = normalizePath(target)
+        const parts = norm.split('/').filter(function (x) { return x })
+        if (parts.length <= 2) return String(target || '')
+        return '…/' + parts.slice(-2).join('/')
+      }
+      // 一个项目下的所有会话（跨子工作区），按最近更新排序
+      function projectSessions(project) {
+        const list = (project.children || []).map(function (item) { return item.ws })
+          .concat(project.selfWs ? [project.selfWs] : [])
+        const seen = new Set()
+        const rows = []
+        for (const ws of list) {
+          if (!ws) continue
+          for (const raw of sessionIdsOf(ws)) {
+            const id = String(raw)
+            if (seen.has(id)) continue
+            seen.add(id)
+            if (needle && !matchesSession(id)) continue
+            rows.push({ id: id, ws: ws, summary: summaries[id] })
+          }
         }
+        return rows.sort(function (a, b) {
+          return sessionStamp(b.summary, b.id) - sessionStamp(a.summary, a.id)
+        })
+      }
+      function wsShort(ws) {
+        if (!ws) return ''
+        const title = String(ws.title || '')
+        if (title.indexOf(' / ') >= 0) return title.split(' / ').pop()
+        return baseName(ws.path || '')
+      }
+      function cardSessionRow(item, key) {
+        const id = item.id
+        const summary = item.summary || summaries[id]
+        const label = sessionLabel(summary, id)
+        const state = statusDotState(id, summary)
+        const running = Boolean(state === 'ongoing')
+        const cur = String(id) === String(currentId)
+        return h('div', {
+          key: key,
+          ref: function (node) { if (node) sessionNodes.current[String(id)] = node },
+          className: 'sbw-row sbw-sess sbw-card-sess' + (cur ? ' selected' : '') + (running ? ' running' : ''),
+          title: withActivity(label + ' · ' + wsShort(item.ws), state),
+          onClick: function () { openSession(id) },
+        },
+          h('span', { className: 'sbw-slot' }, statusDot(state)),
+          h('span', { className: 'sbw-title' }, label),
+          h('span', { className: 'sbw-time' }, formatRelative(sessionStamp(summary, id))),
+          h('span', { className: 'sbw-actions' },
+            h('button', { className: 'sbw-mini', title: '导出这个会话', onClick: function (e) { e.stopPropagation(); exportSessions([item.ws], label) } }, glyph('IconDownloadOutlineRegular', 14, '⇩'))
+          )
+        )
+      }
+      function projectCard(project) {
+        const open = needle ? true : isRootOpen(project.id)
+        const rollup = projectRollup(project)
         const isRenaming = renaming === project.id
-        return h('div', { key: project.id },
-          rowShell({
-            className: projectRowClass(project, 'sbw-row sbw-proj'),
-            title: withActivity(project.path, rollupActivity(projectRollup(project))),
-            open: open,
-            color: project.color,
-            activity: rollupActivity(projectRollup(project)),
-            onFolderClick: function () {
-              const list = (project.children || []).map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : [])
-              openSessionList({ title: displayName(project.name || project.root, project.alias), wsIds: wsIdsOf(list) })
-            },
-            drag: projectDragProps(project),
+        const moreKey = 'card:' + project.id
+        const all = projectSessions(project)
+        const expanded = moreOpen[moreKey] === true
+        let shown = expanded || needle ? all : all.slice(0, 4)
+        // 当前会话排在预览之外时，把它挤进预览，保证「点标签后左侧能看到并高亮」
+        const hasCurrent = currentId && all.some(function (x) { return x.id === String(currentId) })
+        if (!expanded && !needle && currentId && hasCurrent && !shown.some(function (x) { return x.id === String(currentId) })) {
+          const hit = all.filter(function (x) { return x.id === String(currentId) })[0]
+          if (hit) shown = shown.slice(0, 3).concat([hit])
+        }
+        const rest = all.length - shown.length
+        const subs = (project.children || []).filter(function (item) { return item.ws })
+        return h('div', { key: project.id, className: 'sbw-card' + (project.pinned ? ' is-pinned' : '') },
+          h('div', Object.assign({
+            className: 'sbw-card-hd',
+            title: withActivity(displayName(project.name || project.root, project.alias) + ' · ' + (project.path || project.root), rollupActivity(rollup)),
             onClick: function () { if (!isRenaming) toggleRoot(project.id) },
-            text: isRenaming
+          }, projectDragProps(project)),
+            h('span', {
+              className: 'sbw-card-dot',
+              style: project.color ? { background: project.color } : undefined,
+            }),
+            isRenaming
               ? h('input', {
                 className: 'sbw-input',
                 autoFocus: true,
@@ -1461,34 +1485,83 @@ window.__ModuleLoader__.load({
                   else if (e.key === 'Escape') { e.preventDefault(); setRenaming('') }
                 },
               })
-              : h('span', { className: 'sbw-text' },
-                h('span', { className: 'sbw-title' }, displayName(project.name || project.root, project.alias)),
-                tagChips(project.tags),
-                rollupBadge(projectRollup(project))
-              ),
-            actions: isRenaming
-              ? h('span', { className: 'sbw-actions show' },
-                h('button', { className: 'sbw-mini', title: '保存项目名称', disabled: busy, onClick: function (e) { e.stopPropagation(); commitRename(project) } }, glyph('IconCheckOutlineRegular', 14, '✓')),
-                h('button', { className: 'sbw-mini', title: '取消', onClick: function (e) { e.stopPropagation(); setRenaming('') } }, glyph('IconCloseOutlineRegular', 14, '✕'))
-              )
-              : h('span', { className: 'sbw-actions' },
-                h('button', { className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''), title: project.pinned ? '取消置顶' : '置顶项目', onClick: function (e) { e.stopPropagation(); togglePin(project) } }, glyph('IconPinOutlineRegular', 14, '📌')),
-                h('button', { className: 'sbw-mini', title: '编辑名称 / 别名 / 标签', onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) } }, glyph('IconEditOutlineRegular', 14, '✎')),
-                h('button', { className: 'sbw-mini', title: '在资源管理器中打开目录', onClick: function (e) { e.stopPropagation(); openDir(project.path) } }, glyph('IconFolderOpenRegular', 14, '▤')),
-                h('button', { className: 'sbw-mini', title: '给该项目添加子工作区', onClick: function (e) { e.stopPropagation(); openCreateDialog({ root: project.path || project.root, name: project.name || '' }) } }, glyph('IconPlusOutlineRegular', 14, '＋')),
-                h('button', { className: 'sbw-mini', title: '导出该项目的全部会话', onClick: function (e) { e.stopPropagation(); exportSessions(project.children.map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : []), project.name || project.root) } }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
-                h('button', { className: 'sbw-mini sbw-danger', title: '移除项目（不删除工作区）', onClick: function (e) { e.stopPropagation(); removeProjectItem(project) } }, glyph('IconTrashOutlineRegular', 14, '删'))
-              ),
-          }),
-          open ? (function () {
-            const root = childTree({ root: project.root, path: project.path, children: children })
-            return h('div', { className: 'sbw-branch', style: { '--sbw-guide': '20px' } },
-              Array.from(root.children.entries())
-                .sort(function (a, b) { return a[0].localeCompare(b[0]) })
-                .map(function (entry) { return dirNode(entry[1], project.id + '/d:' + entry[0], 1, project) }))
-          })() : null
+              : h('span', { className: 'sbw-card-name' }, displayName(project.name || project.root, project.alias)),
+            rollupBadge(rollup),
+            h('span', { className: 'sbw-card-tools' },
+              h('button', {
+                className: 'sbw-mini sbw-pin' + (project.pinned ? ' pinned' : ''),
+                title: project.pinned ? '取消置顶' : '置顶项目',
+                onClick: function (e) { e.stopPropagation(); togglePin(project) },
+              }, glyph('IconPinOutlineRegular', 14, '📌')),
+              h('button', {
+                className: 'sbw-mini sbw-always',
+                title: '新建会话',
+                onClick: function (e) {
+                  e.stopPropagation()
+                  const target = (subs[0] && subs[0].ws) || project.selfWs
+                  if (target) newSession(target)
+                  else openCreateDialog({ root: project.path || project.root, name: project.name || '' })
+                },
+              }, glyph('IconNewChatOutlineRegular', 14, '＋')),
+              h('button', {
+                className: 'sbw-mini',
+                title: '编辑名称 / 别名 / 标签 / 颜色',
+                onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) },
+              }, glyph('IconEditOutlineRegular', 14, '✎')),
+              h('button', {
+                className: 'sbw-mini sbw-opt',
+                title: '在资源管理器中打开目录',
+                onClick: function (e) { e.stopPropagation(); openDir(project.path) },
+              }, glyph('IconFolderOpenRegular', 14, '▤')),
+              h('button', {
+                className: 'sbw-mini sbw-opt',
+                title: '导出该项目的全部会话',
+                onClick: function (e) {
+                  e.stopPropagation()
+                  exportSessions((project.children || []).map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : []), project.name || project.root)
+                },
+              }, glyph('IconDownloadOutlineRegular', 14, '⇩')),
+              h('button', {
+                className: 'sbw-mini sbw-opt sbw-danger',
+                title: '移除项目（不删除工作区）',
+                onClick: function (e) { e.stopPropagation(); removeProjectItem(project) },
+              }, glyph('IconTrashOutlineRegular', 14, '删'))
+            )
+          ),
+          h('div', { className: 'sbw-card-meta' },
+            h('span', { className: 'sbw-card-path', title: project.path || project.root }, shortPath(project.path || project.root)),
+            tagChips(project.tags)
+          ),
+          open
+            ? h('div', { className: 'sbw-card-body' },
+              subs.length > 1
+                ? h('div', { className: 'sbw-card-subs' }, subs.map(function (item) {
+                  const state = wsActivity(item.ws)
+                  return h('button', {
+                    key: 'chip:' + project.id + ':' + item.child.path,
+                    className: 'sbw-chip' + (state ? ' act-' + state : ''),
+                    title: withActivity(displayName(item.child.name, item.child.alias) + ' · ' + (item.ws ? item.ws.path : item.child.path), state),
+                    onClick: function (e) {
+                      e.stopPropagation()
+                      openSessionList({ title: displayName(item.child.name, item.child.alias), wsIds: wsIdsOf([item.ws]) })
+                    },
+                  }, statusDot(state || 'idle'), h('span', { className: 'sbw-chip-t' }, displayName(item.child.name, item.child.alias)))
+                }))
+                : null,
+              shown.length
+                ? h('div', { className: 'sbw-card-sessions' }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id) }))
+                : h('div', { className: 'sbw-card-empty' }, '暂无会话'),
+              rest > 0
+                ? h('button', {
+                  className: 'sbw-card-more',
+                  onClick: function (e) { e.stopPropagation(); toggleMore(moreKey) },
+                }, '还有 ' + rest + ' 个会话', glyph('IconTriangleRightFillRegular', 10, '▾'))
+                : null
+            )
+            : null
         )
       }
+      function projectNode(project) { return projectCard(project) }
       if (!wide) {
         return h('div', { className: 'sbw sbw-rail' },
           h('div', { className: 'sbw-hd' },
@@ -2117,6 +2190,38 @@ window.__ModuleLoader__.load({
       '.sbw-branch > * + *{margin-top:1px}',
     ].join('')
 
+    const CARD_CSS = [
+      '.sbw-card{display:flex;flex-direction:column;margin:6px 0 8px;padding:0;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.22));border-radius:var(--dsw-radius-md,12px);background:var(--dsw-alias-bg-layer-1,#fff);overflow:hidden;transition:border-color 130ms ease,box-shadow 130ms ease}',
+      '.sbw-card:hover{border-color:var(--dsw-alias-border-l4,rgba(127,127,127,.4));box-shadow:0 2px 8px rgba(0,0,0,.06)}',
+      '.sbw-card.is-pinned{border-color:color-mix(in srgb,var(--dsw-alias-brand-primary,#4d6bfe) 34%,transparent)}',
+      '.sbw-card-hd{display:flex;align-items:center;gap:6px;height:34px;padding:0 6px 0 9px;cursor:pointer;user-select:none;color:var(--dsw-alias-label-primary)}',
+      '.sbw-card-hd:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.sbw-card-dot{flex:none;width:6px;height:16px;border-radius:3px;background:var(--dsw-alias-brand-primary,#4d6bfe)}',
+      '.sbw-card-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;font-weight:600}',
+      '.sbw-card-tools{flex:none;display:flex;align-items:center;gap:2px;margin-left:auto;opacity:0;transition:opacity 130ms ease}',
+      '.sbw-card-hd:hover .sbw-card-tools,.sbw-card-tools:focus-within{opacity:1}',
+      '.sbw-card-tools .sbw-mini.sbw-always{opacity:1}',
+      '.sbw-card-tools .sbw-mini.sbw-opt{display:none}',
+      '.sbw-card-hd:hover .sbw-card-tools .sbw-mini.sbw-opt{display:inline-flex}',
+      '.sbw-card-hd:hover .sbw-card-tools .sbw-always{opacity:1}',
+      '.sbw-card-meta{display:flex;align-items:center;gap:6px;padding:0 10px 6px 21px;min-width:0}',
+      '.sbw-card-meta .sbw-tags{flex:none}',
+      '.sbw-card-path{flex:0 1 auto;min-width:0;padding:0;font-size:11px;line-height:15px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.sbw-card-body{padding:0 4px 4px}',
+      '.sbw-card-subs{display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px 17px}',
+      '.sbw-chip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;cursor:pointer;max-width:100%}',
+      '.sbw-chip:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.sbw-chip .sbw-dot{width:5px;height:5px;margin:0}',
+      '.sbw-chip-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.sbw-card-sessions{display:flex;flex-direction:column;gap:1px}',
+      '.sbw-card-sess{height:30px;border-radius:var(--dsw-radius-sm,8px)}',
+      '.sbw-card-sess .sbw-title{font-size:13.5px}',
+      '.sbw-card-sess .sbw-time{font-size:11px}',
+      '.sbw-card-more{display:flex;align-items:center;gap:4px;width:100%;height:26px;margin-top:2px;padding:0 8px 0 20px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11.5px;cursor:pointer;border-radius:var(--dsw-radius-sm,8px)}',
+      '.sbw-card-more:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.sbw-card-empty{padding:6px 8px 8px 20px;font-size:11.5px;color:var(--dsw-alias-label-tertiary)}',
+      '.sbw-rail .sbw-card{display:none}'
+    ]
     const TABS_CSS = [
       '.pwt-band{box-sizing:border-box;z-index:40;display:flex;align-items:center;height:38px;padding:0 14px;gap:10px;background:var(--dsw-alias-bg-base,#fff);border-bottom:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
       '.pwt-probe{position:absolute;width:1px;height:1px;pointer-events:none;opacity:0}',
@@ -2136,7 +2241,7 @@ window.__ModuleLoader__.load({
       '.pwt-add:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.08));color:var(--dsw-alias-label-primary)}',
     ].join('')
 
-    const CSS = SIDEBAR_CSS + DIALOG_CSS + REFINE_CSS + TABS_CSS
+    const CSS = SIDEBAR_CSS + DIALOG_CSS + REFINE_CSS + TABS_CSS + CARD_CSS
 
     async function request(url, init) {
       const response = await fetch(url, Object.assign({ credentials: 'same-origin' }, init || {}))
