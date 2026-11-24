@@ -1,6 +1,6 @@
 # dsh-project-workspaces
 
-[DeepSeek Harness](https://github.com/deepseek-ai) 插件：一个插件搞定「项目 → 子工作区」——把项目根目录下的直接子目录注册成 DSH 原生 Workspace，记录项目层级，并**用侧边栏替换掉原生左侧工作区区域**（项目 → 子工作区 → 会话），标题栏的 `＋` 就是「新增工作区」弹窗。
+[DeepSeek Harness](https://github.com/deepseek-ai) 插件：一个插件搞定「项目 → 子工作区」——把项目根目录下的直接子目录注册成 DSH 原生 Workspace，记录项目层级，并**用侧边栏替换掉原生左侧工作区区域**（项目 → 子工作区 → 会话），标题栏的 `＋` 就是「新建项目」弹窗。
 
 - 宿主半边（`lib/index.js`）：`DSH_HOME/project-workspaces.json` 里的层级 + `/dsh-project-workspaces/*` HTTP 路由
 - 客户端半边（`client/client.js`）：`sidebar.workspaces`（priority -100）、`settings.section`（设置 → 项目工作区）、`shell.overlay`（新增工作区 / 编辑弹窗）
@@ -85,6 +85,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **会话导出**：会话行 `⇩` 导出单个会话、子工作区行 `⇩` 导出该工作区的全部会话、项目行 `⇩` 导出整个项目（含所有子工作区）的会话；服务端读 `sessionQuery.readSession` 汇成 Markdown（用户/助手消息、工具调用与结果，跳过 system/developer），文件名 `标签-会话导出-YYYYMMDD.md`，浏览器直接下载
 - **临时会话**：标题栏的 `◷` 按钮直接开一个临时会话——在系统临时目录下建 `dsh-temp-<时间戳>` 并注册成工作区，会话立刻打开；临时工作区单独收在侧边栏的「临时会话」分组里，用完点行尾删除即可（只删工作区，不删项目）
 - **叶子项目**：没有子工作区的项目直接把自己注册成一个 Workspace，侧边栏里点它就能开会话，不需要先扫描
+- **新建项目弹窗三步走**：① 选根目录 ② 起名字 ③（可选）扫描勾选子工作区；每一步都有编号和说明，底部常驻一张「将创建什么」的摘要卡，主按钮写「创建项目」
 - **递归扫描**：项目 → 子目录可以多层（`public/web/src`），子工作区按相对路径存进项目，侧边栏会按路径层级自动合并成目录节点
 - **别名可留空**：别名只是侧边栏上的补充说明，留空就显示项目名称本身
 - **当前会话高亮 + 自动滚动**：正在用的会话在侧边栏里始终有品牌色底 + 左侧 2px 竖条 + 品牌色标题；打开/切换会话时侧边栏自动滚到它，被折叠的工作区与目录、以及超过 6 条的会话列表都会为它自动展开
@@ -139,7 +140,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 
 ## 前端事件
 
-- `dsh-project-workspaces:open-create`：`window` CustomEvent，`detail = { root?, name? }`，打开「新增工作区」弹窗（带 `root` 时是「给该项目添加子工作区」）。插件内部也走同一条总线（`openCreateDialog()`），事件保留兼容性。
+- `dsh-project-workspaces:open-create`：`window` CustomEvent，`detail = { root?, name? }`，打开「新建项目」弹窗（带 `root` 时是「给该项目添加子工作区」）。插件内部也走同一条总线（`openCreateDialog()`），事件保留兼容性。
 - `dsh-project-workspaces:changed`：项目/Workspace 变更后广播，侧边栏据此刷新。
 
 弹窗挂在 `shell.overlay` 槽位，不依赖设置页是否打开；样式同样走 `--dsw-*` 令牌（`bg-layer-1` / `border-l2` / `button-primary-fill` / `radius-md` / `radius-xl`），主按钮 `var(--dsw-alias-button-primary-fill, #4d6bfe)`。

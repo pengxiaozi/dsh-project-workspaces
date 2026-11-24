@@ -1350,7 +1350,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'sbw-hd' },
             h('button', { className: 'sbw-ibtn', title: '展开工作区', onClick: function () { try { expandSidebar() } catch (err) { void err } } }, glyph('IconPanelLeftOutlineRegular', 16, '▤')),
             h('button', { className: 'sbw-ibtn', title: '新建临时会话', onClick: newTempSession }, glyph('IconClockOutlineRegular', 16, '◷')),
-            h('button', { className: 'sbw-ibtn', title: '新增工作区', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋'))
+            h('button', { className: 'sbw-ibtn', title: '新建项目', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋'))
           )
         )
       }
@@ -1496,7 +1496,7 @@ window.__ModuleLoader__.load({
               : h('button', { className: 'sbw-ibtn', title: '新建临时会话', onClick: newTempSession }, glyph('IconClockOutlineRegular', 16, '◷')),
             searchOpen
               ? null
-              : h('button', { className: 'sbw-ibtn', title: '新增工作区', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋')),
+              : h('button', { className: 'sbw-ibtn', title: '新建项目', onClick: function () { openCreateDialog({}) } }, glyph('IconPlusOutlineRegular', 16, '＋')),
             searchOpen
               ? null
               : h('button', { className: 'sbw-ibtn', title: '刷新', onClick: loadTree }, glyph('IconRefreshOutlineRegular', 16, '⟳'))
@@ -1540,7 +1540,7 @@ window.__ModuleLoader__.load({
                 ? '再点一次上方的标签可以取消筛选。'
                 : '选一个项目根目录并命名，勾选要独立开的子目录，就能拆成多个工作区。'),
               tagFilter ? null : h('button', { className: 'sbw-empty-btn', onClick: function () { openCreateDialog() } },
-                glyph('IconPlusOutlineRegular', 14, '＋'), '新增工作区')
+                glyph('IconPlusOutlineRegular', 14, '＋'), '新建项目')
             ) : null,
             !empty && !hasProjects && !tagFilter ? h('div', { className: 'sbw-hint' }, '提示：点 ＋ 新建项目，或到「设置 → 项目工作区」点「按父目录自动归组」。') : null,
             pinnedProjects.length ? h('div', { className: 'sbw-group sbw-sect' },
@@ -1647,7 +1647,7 @@ window.__ModuleLoader__.load({
     '.pw-toast-title{font-size:13px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
     '.pw-toast-sub{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
     '.pw-modal{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--dsw-alias-bg-mask-1,rgba(0,0,0,.28))}' +
-      '.pw-modal-card{display:flex;flex-direction:column;gap:16px;width:min(560px,calc(100vw - 48px));max-height:min(80vh,720px);box-sizing:border-box;padding:20px 22px 16px;border-radius:var(--dsw-radius-xl,20px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));box-shadow:0 24px 64px rgba(0,0,0,.22),0 2px 8px rgba(0,0,0,.08);font-family:var(--dsw-font-family,inherit)}' +
+      '.pw-modal-card{display:flex;flex-direction:column;gap:16px;width:min(560px,calc(100vw - 48px));max-height:min(86vh,760px);overflow:hidden;box-sizing:border-box;padding:20px 22px 16px;border-radius:var(--dsw-radius-xl,20px);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));box-shadow:0 24px 64px rgba(0,0,0,.22),0 2px 8px rgba(0,0,0,.08);font-family:var(--dsw-font-family,inherit)}' +
       '.pw-modal-head{flex:none;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}' +
       '.pw-modal-title{margin:0 0 2px;font-size:16px;line-height:22px;font-weight:600}' +
       '.pw-modal-sub{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
@@ -1658,6 +1658,16 @@ window.__ModuleLoader__.load({
       '.pw-control{display:flex;align-items:center;gap:8px;min-width:0}' +
       '.pw-field .pw-input{flex:1 1 auto;width:100%;min-width:0}' +
       '.pw-dirs{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));border-radius:var(--dsw-radius-md,12px);background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 2%,transparent)}' +
+      '.pw-step{display:flex;align-items:center;gap:6px;margin-bottom:6px}' +
+      '.pw-step-num{flex:none;width:16px;height:16px;border-radius:50%;background:var(--dsw-alias-bg-layer-2,#f2f3f5);color:var(--dsw-alias-label-secondary);font-size:10px;line-height:16px;text-align:center}' +
+      '.pw-step-text{flex:none;font-size:12px;line-height:18px;font-weight:500;color:var(--dsw-alias-label-primary)}' +
+      '.pw-step-hint{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
+      '.pw-scanline{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}' +
+      '.pw-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:16px;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}' +
+      '.pw-summary{display:flex;flex-direction:column;gap:4px;margin-top:2px;padding:8px 10px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));border-radius:var(--dsw-radius-md,12px);background:var(--dsw-alias-bg-layer-1,transparent)}' +
+      '.pw-summary-line{display:flex;gap:8px;font-size:12px;line-height:18px}' +
+      '.pw-summary-key{flex:none;width:44px;color:var(--dsw-alias-label-tertiary)}' +
+      '.pw-summary-val{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-primary)}' +
       '.pw-field-head{display:flex;align-items:center;justify-content:space-between;gap:8px}' +
       '.pw-depth{display:flex;align-items:center;gap:4px}' +
       '.pw-depth-btn{height:22px;padding:0 8px;border:0.5px solid var(--dsw-alias-border-l4,rgba(127,127,127,.4));border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:18px;cursor:pointer}' +
@@ -1688,7 +1698,7 @@ window.__ModuleLoader__.load({
       '.pw-sess-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary,#4d6bfe)}' +
       '.pw-sess-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px}' +
       '.pw-sess-time{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
-      '.pw-footer{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}' +
+      '.pw-footer{flex:none;position:sticky;bottom:-2px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0 2px;background:var(--dsw-alias-bg-layer-1,transparent);border-top:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}' +
       '.pw-footer-actions{display:flex;align-items:center;gap:8px}'
     const CSS = SIDEBAR_CSS + DIALOG_CSS
 
@@ -1859,77 +1869,101 @@ window.__ModuleLoader__.load({
         })
       }
       const allNodes = tree ? flatten(tree, []) : []
+      const projectName = name.trim() || (root ? baseName(root) : '')
+      const stepHead = function (num, text, hint) {
+        return h('div', { className: 'pw-step' },
+          h('span', { className: 'pw-step-num' }, String(num)),
+          h('span', { className: 'pw-step-text' }, text),
+          hint ? h('span', { className: 'pw-step-hint' }, hint) : null)
+      }
+      const summaryWorkspaces = selectedCount
+        ? '1 个根目录 + ' + selectedCount + ' 个子工作区（共 ' + (selectedCount + 1) + ' 个）'
+        : '1 个根目录工作区'
       return h('div', { className: 'pw-modal', onClick: props.onClose },
         h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
           h('div', { className: 'pw-modal-head' },
             h('div', null,
-              h('h3', { className: 'pw-modal-title' }, props.title || '新增工作区'),
-              h('div', { className: 'pw-modal-sub' }, '选项目根目录并命名即可创建；想拆子工作区再「扫描」，可以逐层往下展开')
+              h('h3', { className: 'pw-modal-title' }, props.title || '新建项目'),
+              h('div', { className: 'pw-modal-sub' }, '一个项目 = 一个根目录 + 若干独立子工作区。先选目录、起名字，再决定要不要拆子工作区。')
             ),
             h('button', { className: 'pw-close', title: '关闭', onClick: props.onClose }, glyph('IconCloseOutlineRegular', 16, '×'))
           ),
           error ? h('div', { className: 'pw-msg err' }, error) : null,
           message ? h('div', { className: 'pw-msg' }, message) : null,
-          h('div', { className: 'pw-field' },
-            h('label', { className: 'pw-label' }, '项目目录'),
-            h('div', { className: 'pw-control' },
+          h('div', { className: 'pw-body' },
+            h('div', { className: 'pw-field' },
+              stepHead(1, '项目根目录'),
+              h('div', { className: 'pw-control' },
+                h('input', {
+                  className: 'pw-input',
+                  placeholder: '例如 D:\\\\\\\\www\\\\\\\\public 或 /home/www/public',
+                  value: root,
+                  onChange: function (e) { setRoot(e.target.value); resetScan() },
+                  onKeyDown: function (e) { if (e.key === 'Enter') { e.preventDefault(); scan() } },
+                }),
+                h('button', { className: 'pw-btn', disabled: busy, onClick: browse }, glyph('IconFolderOpenRegular', 16), '浏览…')
+              ),
+              h('div', { className: 'pw-muted' }, '选择项目最外层的目录（不要选到某个子目录里）。')
+            ),
+            h('div', { className: 'pw-field' },
+              stepHead(2, '项目名称'),
               h('input', {
                 className: 'pw-input',
-                placeholder: '例如 D:\\www\\public 或 /home/www/public',
-                value: root,
-                onChange: function (e) { setRoot(e.target.value); resetScan() },
-                onKeyDown: function (e) { if (e.key === 'Enter') { e.preventDefault(); scan() } },
-              }),
-              h('button', { className: 'pw-btn', disabled: busy, onClick: browse }, glyph('IconFolderOpenRegular', 16), '浏览…'),
-              h('button', { className: 'pw-btn', disabled: busy, onClick: function () { scan() } }, glyph('IconRefreshOutlineRegular', 16), busy ? '扫描中…' : '扫描')
+                placeholder: '不填就用目录名，例如 public',
+                value: name,
+                onChange: function (e) { setName(e.target.value) },
+                onKeyDown: onNameKey,
+              })
+            ),
+            h('div', { className: 'pw-field' },
+              stepHead(3, tree === null ? '子工作区' : '子工作区（已选 ' + selectedCount + ' / 共 ' + allNodes.length + '）', '可选'),
+              h('div', { className: 'pw-scanline' },
+                h('button', { className: 'pw-btn', disabled: busy, onClick: function () { scan() } },
+                  glyph('IconRefreshOutlineRegular', 16), busy ? '扫描中…' : (tree === null ? '扫描子目录' : '重新扫描')),
+                tree !== null && allNodes.length
+                  ? h('div', { className: 'pw-depth' },
+                    [1, 2, 3, 6].map(function (value) {
+                      return h('button', {
+                        key: 'd' + value,
+                        className: 'pw-depth-btn' + (depth === value ? ' on' : ''),
+                        disabled: busy,
+                        title: value === 6 ? '一直展开到 6 层（不继续往下）' : '展开到第 ' + value + ' 层',
+                        onClick: function () { scan(value) },
+                      }, value === 6 ? '更深' : value + ' 层')
+                    })
+                  )
+                  : null
+              ),
+              tree === null
+                ? h('div', { className: 'pw-msg' }, '不扫描也可以创建，那样只把根目录注册成一个工作区。想按子目录拆开，就点上面的「扫描子目录」再勾选。')
+                : allNodes.length
+                  ? h('div', null,
+                    h('div', { className: 'pw-dirs pw-tree' }, renderNodes(tree, 0)),
+                    h('div', { className: 'pw-tree-foot' },
+                      h('button', { className: 'pw-link', disabled: busy, onClick: function () { const next = {}; allNodes.forEach(function (node) { next[node.rel] = true }); setPicked(next) } }, '全选'),
+                      h('button', { className: 'pw-link', disabled: busy, onClick: function () { setPicked({}) } }, '清空'),
+                      skipped.length ? h('span', { className: 'pw-muted' }, '已忽略 ' + skipped.length + ' 个依赖/构建目录') : null
+                    ),
+                    h('div', { className: 'pw-muted' }, '勾中的每个目录 = 一个独立工作区（会话 cwd 就是它）；同一父目录下的会自动合并成一个目录节点。')
+                  )
+                  : h('div', { className: 'pw-msg' }, '该目录下没有子目录')
+            ),
+          ),
+          h('div', { className: 'pw-summary' },
+            h('div', { className: 'pw-summary-line' },
+              h('span', { className: 'pw-summary-key' }, '项目'),
+              h('span', { className: 'pw-summary-val' }, projectName ? projectName + ' · ' + root : '还没有选择目录')
+            ),
+            h('div', { className: 'pw-summary-line' },
+              h('span', { className: 'pw-summary-key' }, '工作区'),
+              h('span', { className: 'pw-summary-val' }, summaryWorkspaces)
             )
           ),
-          h('div', { className: 'pw-field' },
-            h('label', { className: 'pw-label' }, '项目名称'),
-            h('input', {
-              className: 'pw-input',
-              placeholder: '默认取目录名，例如 public',
-              value: name,
-              onChange: function (e) { setName(e.target.value) },
-              onKeyDown: onNameKey,
-            })
-          ),
-          h('div', { className: 'pw-field' },
-            h('div', { className: 'pw-field-head' },
-              h('label', { className: 'pw-label' }, tree === null ? '子工作区' : '子工作区（已选 ' + selectedCount + ' / 共 ' + allNodes.length + '）'),
-              tree !== null && allNodes.length
-                ? h('div', { className: 'pw-depth' },
-                  [1, 2, 3, 6].map(function (value) {
-                    return h('button', {
-                      key: 'd' + value,
-                      className: 'pw-depth-btn' + (depth === value ? ' on' : ''),
-                      disabled: busy,
-                      title: value === 6 ? '一直展开到 6 层（不继续往下）' : '展开到第 ' + value + ' 层',
-                      onClick: function () { scan(value) },
-                    }, value === 6 ? '更深' : value + ' 层')
-                  })
-                )
-                : null
-            ),
-            tree === null
-              ? h('div', { className: 'pw-msg' }, '可选：点「扫描」列出子目录（默认 1 层，可切到 2/3 层或更深）。不扫描也行，那样只把项目根目录本身注册成一个工作区。')
-              : allNodes.length
-                ? h('div', null,
-                  h('div', { className: 'pw-dirs pw-tree' }, renderNodes(tree, 0)),
-                  h('div', { className: 'pw-tree-foot' },
-                    h('button', { className: 'pw-link', disabled: busy, onClick: function () { const next = {}; allNodes.forEach(function (node) { next[node.rel] = true }); setPicked(next) } }, '全选'),
-                    h('button', { className: 'pw-link', disabled: busy, onClick: function () { setPicked({}) } }, '清空'),
-                    skipped.length ? h('span', { className: 'pw-muted' }, '已忽略 ' + skipped.length + ' 个依赖/构建目录') : null
-                  ),
-                  h('div', { className: 'pw-muted' }, '同一父目录下的子工作区（如 public/web、public/page）会在侧边栏自动合并到一个目录节点里。')
-                )
-                : h('div', { className: 'pw-msg' }, '该目录下没有子目录')
-          ),
           h('div', { className: 'pw-footer' },
-            h('div', { className: 'pw-muted' }, selectedCount ? '将创建 ' + selectedCount + ' 个独立子工作区' : '将只注册项目根目录（1 个工作区）'),
+            h('div', { className: 'pw-muted' }, canSubmit ? '创建后可以在侧边栏拖拽排序、置顶或改别名。' : '先选择项目根目录'),
             h('div', { className: 'pw-footer-actions' },
               h('button', { className: 'pw-btn', disabled: busy, onClick: props.onClose }, '取消'),
-              h('button', { className: 'pw-btn primary', disabled: !canSubmit, onClick: submit }, busy ? '创建中…' : '创建工作区')
+              h('button', { className: 'pw-btn primary', disabled: !canSubmit, onClick: submit }, busy ? '创建中…' : '创建项目')
             )
           )
         )
@@ -2140,7 +2174,7 @@ window.__ModuleLoader__.load({
               h('span', { className: 'pw-cmd-label' }, row.label),
               h('span', { className: 'pw-cmd-hint' }, row.hint))
             }))
-            : h('div', { className: 'pw-cmd-empty' }, query ? '没有匹配的项目或会话' : '还没有项目，先按 Esc 关闭再点「＋ 新增工作区」')
+            : h('div', { className: 'pw-cmd-empty' }, query ? '没有匹配的项目或会话' : '还没有项目，先按 Esc 关闭再点「＋ 新建项目」')
         )
       )
     }
@@ -2233,7 +2267,7 @@ window.__ModuleLoader__.load({
       if (seed) {
         dialog = h(CreateDialog, {
           services: props.services,
-          title: seed.root ? '添加子工作区' : '新增工作区',
+          title: seed.root ? '添加子工作区' : '新建项目',
           initialRoot: seed.root || '',
           initialName: seed.name || '',
           onClose: function () { setSeed(null) },
@@ -2369,10 +2403,10 @@ window.__ModuleLoader__.load({
         h('div', { className: 'pw-head' },
           h('div', null,
             h('h2', { className: 'pw-title' }, '项目工作区（子目录会话）'),
-            h('p', { className: 'pw-sub' }, '一个项目 = 根目录 + 若干独立子工作区。点「新增工作区」选目录、命名并勾选子目录；左侧工作区面板按 项目 → 子工作区 → 会话 展示。')
+            h('p', { className: 'pw-sub' }, '一个项目 = 根目录 + 若干独立子工作区。点「新建项目」选目录、命名并勾选子目录；左侧工作区面板按 项目 → 子工作区 → 会话 展示。')
           ),
           h('div', { className: 'pw-row' },
-            h('button', { className: 'pw-btn primary', onClick: function () { setDialog(true) } }, '＋ 新增工作区'),
+            h('button', { className: 'pw-btn primary', onClick: function () { setDialog(true) } }, '＋ 新建项目'),
             h('button', { className: 'pw-btn', disabled: busy, onClick: autoGroup }, '按父目录自动归组'),
             h('button', { className: 'pw-btn', onClick: load }, '刷新')
           )
@@ -2434,7 +2468,7 @@ window.__ModuleLoader__.load({
                   : h('div', { className: 'pw-muted' }, '还没有子工作区')
               )
             }))
-            : h('div', { className: 'pw-muted' }, '还没有项目。点右上角「＋ 新增工作区」开始。')
+            : h('div', { className: 'pw-muted' }, '还没有项目。点右上角「＋ 新建项目」开始。')
         ),
         h('div', { className: 'pw-card' },
           h('h3', null, '手动注册子目录'),
@@ -2477,7 +2511,7 @@ window.__ModuleLoader__.load({
         ),
         dialog ? h(CreateDialog, {
           services: props.services,
-          title: '新增工作区',
+          title: '新建项目',
           onClose: function () { setDialog(false) },
           onCreated: function (project, nextState) { setDialog(false); if (nextState) setState(nextState); else load(); setMessage('已创建项目「' + project.name + '」，共 ' + project.children.length + ' 个子工作区。') }
         }) : null
