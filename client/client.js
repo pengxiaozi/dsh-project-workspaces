@@ -109,6 +109,15 @@ window.__ModuleLoader__.load({
       '.sbw-empty{padding:8px 12px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) + var(--sbw-indent,0px));color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
       '.sbw-roll{margin-left:auto;flex:none;display:flex;align-items:center;gap:6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-roll-item{display:inline-flex;align-items:center;gap:3px}',
+      '.sbw-tabs{display:flex;gap:4px;overflow-x:auto;padding:2px 8px 6px 12px;scrollbar-width:none}',
+      '.sbw-tabs::-webkit-scrollbar{display:none}',
+      '.sbw-tab{flex:none;display:inline-flex;align-items:center;gap:5px;max-width:160px;height:24px;padding:0 8px;border:none;border-radius:999px;background:var(--dsw-alias-bg-layer-2,#f2f3f5);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;cursor:pointer}',
+      '.sbw-tab:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary)}',
+      '.sbw-tab.on{background:color-mix(in srgb, var(--dsw-alias-brand-primary,#4d6bfe) 14%, transparent);color:var(--dsw-alias-brand-primary,#4d6bfe)}',
+      '.sbw-tab.pending{color:var(--dsw-alias-state-warn-primary,#c98a00)}',
+      '.sbw-tab-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.sbw-roll-btn{padding:0;border:none;background:transparent;cursor:pointer;color:inherit;font:inherit}',
+      '.sbw-roll-btn:hover{color:var(--dsw-alias-label-primary)}',
       '.sbw-filters{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px 6px 12px}',
       '.sbw-filter{height:22px;padding:0 9px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.24));border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 4%,transparent);color:var(--dsw-alias-label-secondary);font-size:11px;line-height:20px;cursor:pointer;transition:background-color 120ms ease,border-color 120ms ease,color 120ms ease}',
       '.sbw-filter:hover{background:var(--dsw-alias-interactive-bg-hover)}',
@@ -865,7 +874,13 @@ window.__ModuleLoader__.load({
               if (node) sessionNodes.current[String(id)] = node
             },
           },
-            h('span', { className: 'sbw-slot' }, statusDot(statusDotState(id, summary))),
+            h('span', { className: 'sbw-slot', title: (function () {
+              const st = statusOf(id)
+              if (st && st.pendingInteraction) return '等待你处理，点一下打开'
+              if (st && st.running) return '正在回答，点一下打开'
+              if (st && st.completionUnread) return '已完成，点一下打开'
+              return '点一下打开'
+            })() }, statusDot(statusDotState(id, summary))),
             renaming
               ? h('input', {
                   className: 'sbw-input sbw-input-sess',
@@ -1090,21 +1105,32 @@ window.__ModuleLoader__.load({
         let running = 0
         let pending = 0
         let unread = 0
+        const runningIds = []
+        const pendingIds = []
+        const unreadIds = []
         ids.forEach(function (id) {
           const status = statusOf(id)
           if (!status) return
-          if (status.pendingInteraction) pending += 1
-          else if (status.running) running += 1
-          else if (status.completionUnread) unread += 1
+          if (status.pendingInteraction) { pending += 1; pendingIds.push(id) }
+          else if (status.running) { running += 1; runningIds.push(id) }
+          else if (status.completionUnread) { unread += 1; unreadIds.push(id) }
         })
-        return { running: running, pending: pending, unread: unread, total: ids.length }
+        return {
+          running: running, pending: pending, unread: unread, total: ids.length,
+          runningIds: runningIds, pendingIds: pendingIds, unreadIds: unreadIds,
+        }
+      }
+      // 角标里的数字点一下直接跳到那个会话，省得展开找
+      function rollupPick(ids, event) {
+        if (event) event.stopPropagation()
+        if (ids && ids.length) openSession(ids[0])
       }
       function rollupBadge(rollup) {
         if (!rollup || (!rollup.running && !rollup.pending && !rollup.unread)) return null
         return h('span', { className: 'sbw-roll', title: rollup.pending ? '有会话等待你处理' : (rollup.running ? '有会话正在回答' : '有会话已完成未查看') },
-          rollup.pending ? h('span', { className: 'sbw-roll-item' }, statusDot('warning'), String(rollup.pending)) : null,
-          rollup.running ? h('span', { className: 'sbw-roll-item' }, statusDot('ongoing'), String(rollup.running)) : null,
-          rollup.unread ? h('span', { className: 'sbw-roll-item' }, statusDot('done'), String(rollup.unread)) : null
+          rollup.pending ? h('button', { className: 'sbw-roll-item sbw-roll-btn', title: '打开等待你处理的会话', onClick: function (e) { rollupPick(rollup.pendingIds, e) } }, statusDot('warning'), String(rollup.pending)) : null,
+          rollup.running ? h('button', { className: 'sbw-roll-item sbw-roll-btn', title: '打开正在回答的会话', onClick: function (e) { rollupPick(rollup.runningIds, e) } }, statusDot('ongoing'), String(rollup.running)) : null,
+          rollup.unread ? h('button', { className: 'sbw-roll-item sbw-roll-btn', title: '打开已完成的会话', onClick: function (e) { rollupPick(rollup.unreadIds, e) } }, statusDot('done'), String(rollup.unread)) : null
         )
       }
       function projectNode(project) {
@@ -1219,6 +1245,28 @@ window.__ModuleLoader__.load({
         else Object.keys(statusMap).forEach(function (key) { each(statusMap[key]) })
         return (running || pending) ? { running: running, pending: pending } : null
       })()
+      // 顶部标签条：把正在回答 / 等待处理（以及未读完成）的会话铺在最上面，点一下就切过去
+      const activeTabs = (function () {
+        const rows = []
+        Object.keys(summaries).forEach(function (id) {
+          const status = statusOf(id)
+          if (!status) return
+          const pending = Boolean(status.pendingInteraction)
+          const running = Boolean(status.running)
+          const unread = Boolean(status.completionUnread)
+          if (!pending && !running && !unread) return
+          rows.push({
+            id: String(id),
+            label: sessionLabel(summaries[id]),
+            pending: pending,
+            running: running,
+            unread: unread,
+            rank: pending ? 0 : (running ? 1 : 2),
+          })
+        })
+        rows.sort(function (a, b) { return a.rank - b.rank })
+        return rows.slice(0, 8)
+      })()
       const allTags = (function () {
         const set = new Set()
         ;(projects || []).forEach(function (project) {
@@ -1287,6 +1335,19 @@ window.__ModuleLoader__.load({
           )
         ),
         error ? h('div', { className: 'sbw-msg' }, error) : null,
+        activeTabs.length
+          ? h('div', { className: 'sbw-tabs' }, activeTabs.map(function (tab) {
+            return h('button', {
+              key: 'tab:' + tab.id,
+              className: 'sbw-tab' + (tab.pending ? ' pending' : '') + (String(tab.id) === activeSessionId ? ' on' : ''),
+              title: tab.label + (tab.pending ? ' · 等待你处理' : (tab.running ? ' · 正在回答' : ' · 已完成未查看')),
+              onClick: function () { openSession(tab.id) },
+            },
+              statusDot(tab.pending ? 'warning' : (tab.running ? 'ongoing' : 'done')),
+              h('span', { className: 'sbw-tab-label' }, tab.label))
+          }))
+          : null,
+
         allTags.length
           ? h('div', { className: 'sbw-filters' }, allTags.map(function (tag) {
             return h('button', {
