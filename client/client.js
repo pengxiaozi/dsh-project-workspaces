@@ -2584,6 +2584,7 @@ window.__ModuleLoader__.load({
       ;(((sessionSnap && sessionSnap.byId) ? Object.keys(sessionSnap.byId).map(function (id) { return sessionSnap.byId[id] }) : ((sessionSnap && sessionSnap.items) || []))).forEach(function (summary) {
         if (!summary || !summary.id) return
         push({ key: 's:' + summary.id, kind: '会话', label: sessionLabel(summary), hint: summary.workspaceId || '', run: function () {
+          noteOpened(summary.id)
           if (ui && typeof ui.openSession === 'function') ui.openSession(summary.id)
         } })
       })
@@ -2678,7 +2679,7 @@ window.__ModuleLoader__.load({
                   key: String(item.id),
                   className: 'pw-sess-row',
                   title: sessionLabel(item),
-                  onClick: function () { props.services.uiWorkspace.openSession(item.id); close() },
+                  onClick: function () { noteOpened(item.id); props.services.uiWorkspace.openSession(item.id); close() },
                 },
                   h('span', { className: 'pw-sess-dot' }),
                   h('span', { className: 'pw-sess-title' }, sessionLabel(item)),
@@ -3089,6 +3090,27 @@ window.__ModuleLoader__.load({
             try { document.documentElement.style.removeProperty('--sbw-band-h') } catch (err) { void err }
           }
         }, [])
+        // 新出现的会话（例如「新建会话」）自动补进标签栏
+        const knownRef = React.useRef({})
+        useEffect(function () {
+          const keys = Object.keys(summaries)
+          const fresh = []
+          for (let i = 0; i < keys.length; i += 1) {
+            const key = keys[i]
+            if (knownRef.current[key]) continue
+            knownRef.current[key] = true
+            if (knownRef.current.__ready) fresh.push(key)
+          }
+          if (!knownRef.current.__ready) { knownRef.current.__ready = true; return }
+          if (!fresh.length) return
+          fresh.sort(function (a, b) { return (sessionStamp(summaries[b]) || 0) - (sessionStamp(summaries[a]) || 0) })
+          noteOpened(fresh[0])
+          setOrder(function (prev) {
+            const next = [fresh[0]].concat(prev.filter(function (x) { return x !== fresh[0] })).slice(0, MAX_TABS)
+            writeTabs(next)
+            return next
+          })
+        })
         function drop(id) {
           setOrder(function (prev) {
             const next = prev.filter(function (x) { return x !== id })
@@ -3099,8 +3121,23 @@ window.__ModuleLoader__.load({
         function openAll() {
           try { window.dispatchEvent(new CustomEvent('dsh-project-workspaces:open-palette')) } catch (err) { void err }
         }
-        const list = order.filter(function (id) { return summaries[id] })
+        // 兜底：除了「点过的」，也把快照里最近的会话填进来，保证一定能看到刚打开的那个
+        const recent = Object.keys(summaries).sort(function (a, b) {
+          const sa = summaries[a] || {}
+          const sb = summaries[b] || {}
+          return (sessionStamp(sb) || 0) - (sessionStamp(sa) || 0)
+        })
+        const merged = []
+        const seen = {}
+        order.concat(recent).forEach(function (id) {
+          const key = String(id || '')
+          if (!key || seen[key] || !summaries[key]) return
+          seen[key] = true
+          merged.push(key)
+        })
+        const list = merged.slice(0, MAX_TABS)
         if (!list.length) return h('span', { ref: probeRef, className: 'pwt-probe' })
+        if (!activeId && list.length) { /* 没有明确当前会话时不高亮 */ }
         const style = box
           ? { left: box.left + 'px', top: (box.top - BAND_HEIGHT) + 'px', width: box.width + 'px', position: 'fixed' }
           : (inlineFallback ? { position: 'relative', width: '100%' } : { position: 'absolute', left: '-9999px', top: '0px', width: '520px' })
