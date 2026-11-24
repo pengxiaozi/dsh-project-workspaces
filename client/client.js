@@ -2995,6 +2995,7 @@ window.__ModuleLoader__.load({
         if (!value) return
         lastOpenedId = value
         try { if (window.localStorage) window.localStorage.setItem(LAST_KEY, value) } catch (err) { void err }
+        try { window.dispatchEvent(new CustomEvent('dsh-project-workspaces:opened', { detail: { id: value } })) } catch (err) { void err }
       }
       const TABS_KEY = 'dsh-project-workspaces:tabs'
       const MAX_TABS = 8
@@ -3024,6 +3025,7 @@ window.__ModuleLoader__.load({
         const [order, setOrder] = useState(readTabs)
         const [box, setBox] = useState(null)          // { left, top, width, header }
         const [inlineFallback, setInlineFallback] = useState(false)
+        const [dismissed, setDismissed] = useState({})
         const probeRef = React.useRef(null)
         const listRef = React.useRef(null)
         const tabRefs = React.useRef({})
@@ -3084,6 +3086,21 @@ window.__ModuleLoader__.load({
             try { document.documentElement.style.removeProperty('--sbw-band-h') } catch (err) { void err }
           }
         }, [])
+        useEffect(function () {
+          function onOpened(event) {
+            const id = String((event && event.detail && event.detail.id) || '')
+            if (!id) return
+            setDismissed(function (prev) { if (!prev[id]) return prev; const next = Object.assign({}, prev); delete next[id]; return next })
+            setOrder(function (prev) {
+              if (prev.indexOf(id) >= 0) return prev
+              const next = prev.concat(id).slice(-MAX_TABS)
+              writeTabs(next)
+              return next
+            })
+          }
+          window.addEventListener('dsh-project-workspaces:opened', onOpened)
+          return function () { window.removeEventListener('dsh-project-workspaces:opened', onOpened) }
+        }, [])
         // 新出现的会话（例如「新建会话」）自动补进标签栏
         const knownRef = React.useRef({})
         useEffect(function () {
@@ -3099,13 +3116,9 @@ window.__ModuleLoader__.load({
           if (!fresh.length) return
           fresh.sort(function (a, b) { return (sessionStamp(summaries[b]) || 0) - (sessionStamp(summaries[a]) || 0) })
           noteOpened(fresh[0])
-          setOrder(function (prev) {
-            const next = [fresh[0]].concat(prev.filter(function (x) { return x !== fresh[0] })).slice(0, MAX_TABS)
-            writeTabs(next)
-            return next
-          })
         })
         function drop(id) {
+          setDismissed(function (prev) { const next = Object.assign({}, prev); next[id] = true; return next })
           setOrder(function (prev) {
             const next = prev.filter(function (x) { return x !== id })
             writeTabs(next)
@@ -3115,28 +3128,10 @@ window.__ModuleLoader__.load({
         function openAll() {
           try { window.dispatchEvent(new CustomEvent('dsh-project-workspaces:open-palette')) } catch (err) { void err }
         }
-        // 兜底：除了「点过的」，也把快照里最近的会话填进来，保证一定能看到刚打开的那个
-        const recent = Object.keys(summaries).sort(function (a, b) {
-          const sa = summaries[a] || {}
-          const sb = summaries[b] || {}
-          return (sessionStamp(sb) || 0) - (sessionStamp(sa) || 0)
-        })
-        const merged = []
-        const seen = {}
-        order.concat(recent).forEach(function (id) {
-          const key = String(id || '')
-          if (!key || seen[key] || !summaries[key]) return
-          seen[key] = true
-          merged.push(key)
-        })
         const highlightId = activeId || ''
-        const list = merged.slice(0, MAX_TABS)
-        useEffect(function () {
-          if (!highlightId) return
-          const node = tabRefs.current[highlightId]
-          if (!node || typeof node.scrollIntoView !== 'function') return
-          try { node.scrollIntoView({ block: 'nearest', inline: 'nearest' }) } catch (err) { void err }
-        }, [highlightId, list.length])
+        const merged = order.slice()
+        if (highlightId && merged.indexOf(highlightId) < 0 && !dismissed[highlightId]) merged.push(highlightId)
+        const list = merged.filter(function (id) { return summaries[id] }).slice(0, MAX_TABS)
         if (!list.length) return h('span', { ref: probeRef, className: 'pwt-probe' })
         if (!activeId && list.length) { /* 没有明确当前会话时不高亮 */ }
         const style = box
