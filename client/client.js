@@ -35,8 +35,8 @@ window.__ModuleLoader__.load({
     }
     // 尺寸/间距全部照抄原生 sidebar：WorkspaceBrowser.module.css + Rows.module.css
     const SIDEBAR_CSS = [
-      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit)}',
-      '.sbw-wide{flex:none;max-height:100cqh}',
+      '.sbw{--sbw-toolbar-height:36px;position:relative;flex:1;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family,inherit);height:100%}',
+      '.sbw-wide{flex:1 1 auto;min-height:0;max-height:100%;overflow:hidden}',
       '.sbw-hd{flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;height:36px;padding-left:var(--dsh-sidebar-row-padding,12px);box-sizing:border-box;border-radius:var(--dsw-radius-md,12px);overflow:hidden;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-hd:not(.open){margin-right:-4px;padding-right:1px}',
       '.sbw-hd-label{font-weight:500;letter-spacing:.02em}',
@@ -52,7 +52,8 @@ window.__ModuleLoader__.load({
       '.sbw-search input{flex:1;width:0;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}',
       '.sbw-search input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.sbw-scroll{flex:1;min-height:0;display:flex;flex-direction:column}',
-      '.sbw-wide .sbw-scroll{display:block;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;scrollbar-gutter:stable}',
+      '.sbw-wide .sbw-scroll{display:block;flex:1 1 auto;min-height:0;max-height:100%;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
+      '.sbw-wide .sbw-scroll{touch-action:pan-y}',
       '.sbw-skel{padding:2px 8px}',
       '.sbw-skel-row{display:flex;align-items:center;gap:8px;height:32px;padding-left:calc(var(--dsh-sidebar-row-padding,12px) - 3px)}',
       '.sbw-skel-ico{flex:none;width:16px;height:16px;border-radius:var(--dsw-radius-xs,4px);background:color-mix(in srgb,var(--dsw-alias-label-primary,#111) 8%,transparent);animation:sbw-pulse 1.2s ease-in-out infinite}',
@@ -112,6 +113,8 @@ window.__ModuleLoader__.load({
       '.sbw-empty{padding:8px 12px;padding-inline-start:calc(var(--dsh-sidebar-row-padding,12px) + var(--sbw-indent,0px));color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
       '.sbw-roll{margin-left:auto;flex:none;display:flex;align-items:center;gap:6px;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}',
       '.sbw-roll-item{display:inline-flex;align-items:center;gap:3px}',
+      '.sbw-folder-hit{padding:0;border:none;background:transparent;cursor:pointer;color:inherit}',
+      '.sbw-folder-hit:hover{color:var(--dsw-alias-brand-primary,#4d6bfe)}',
       '.sbw-folder{position:relative}',
       '.sbw-folder.act-ongoing::after{content:"";position:absolute;right:-3px;bottom:-1px;width:8px;height:8px;border-radius:50%;border:1.5px solid transparent;background:var(--dsw-alias-bg-base,#fff);border-top-color:var(--dsw-alias-state-business-primary,#4d6bfe);border-right-color:var(--dsw-alias-state-business-primary,#4d6bfe);animation:sbw-spin .9s linear infinite}',
       '.sbw-folder.act-warning::after{content:"";position:absolute;right:-2px;bottom:0;width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-warn-primary,#c98a00);filter:drop-shadow(0 0 1.5px var(--dsw-alias-bg-base,#fff))}',
@@ -303,6 +306,25 @@ window.__ModuleLoader__.load({
       }, [items])
       return [items, setItems]
     }
+    // 会话列表弹窗总线：点某个目录的图标就能把该目录下的会话摊开成一个列表
+    const sessionListListeners = new Set()
+
+    function openSessionList(payload) {
+      sessionListListeners.forEach(function (listener) {
+        try { listener(payload) } catch (err) { /* 忽略单个监听器异常 */ }
+      })
+    }
+
+    function useSessionListSeed() {
+      const [seed, setSeed] = useState(null)
+      useEffect(function () {
+        const listener = function (value) { setSeed(value) }
+        sessionListListeners.add(listener)
+        return function () { sessionListListeners.delete(listener) }
+      }, [])
+      return [seed, setSeed]
+    }
+
     function useEditDialogSeed() {
       const [seed, setSeed] = useState(null)
       useEffect(function () {
@@ -817,8 +839,20 @@ window.__ModuleLoader__.load({
         if (options.drag) Object.assign(shellProps, options.drag)
         // 目录图标右下角的小徽标：正在回答 = 转圈，等待处理 = 琥珀点，未读完成 = 绿点
         const actClass = options.activity ? ' act-' + options.activity : ''
+        const folderClass = 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : '') + actClass + (options.onFolderClick ? ' sbw-folder-hit' : '')
+        const folderStyle = options.color ? { color: options.color } : undefined
+        const folderInner = options.icon || FolderIcon({ open: options.open })
+        // 文件夹图标可以点：弹出该目录下所有会话，方便在长列表里直接挑
+        const folderNode = options.onFolderClick
+          ? h('button', {
+            className: folderClass,
+            style: folderStyle,
+            title: options.folderTitle || '列出这里的会话',
+            onClick: function (e) { e.stopPropagation(); options.onFolderClick(e) },
+          }, folderInner)
+          : h('span', { className: folderClass, style: folderStyle }, folderInner)
         return h('div', shellProps,
-          h('span', { className: 'sbw-slot sbw-folder' + (options.active ? ' sbw-folder-active' : '') + actClass, style: options.color ? { color: options.color } : undefined }, options.icon || FolderIcon({ open: options.open })),
+          folderNode,
           h('span', { className: 'sbw-slot sbw-chev' }, ChevronIcon({ open: options.open })),
           options.text,
           options.actions
@@ -979,6 +1013,29 @@ window.__ModuleLoader__.load({
         }
         return rows
       }
+      // 点文件夹图标时用：把要列出的 Workspace id 收集起来
+      function wsIdsOf(wsList) {
+        const out = []
+        ;(wsList || []).forEach(function (ws) {
+          if (ws && ws.workspaceId && out.indexOf(String(ws.workspaceId)) < 0) out.push(String(ws.workspaceId))
+        })
+        return out
+      }
+
+      function nodeWsIds(node) {
+        const out = []
+        const walk = function (current) {
+          if (!current) return
+          if (current.item && current.item.ws && current.item.ws.workspaceId) {
+            const id = String(current.item.ws.workspaceId)
+            if (out.indexOf(id) < 0) out.push(id)
+          }
+          if (current.children) current.children.forEach(function (entry) { walk(entry) })
+        }
+        walk(node)
+        return out
+      }
+
       function workspaceNode(ws, label, key, depth, meta) {
         const open = isChildOpen(key, ws)
         const info = meta || {}
@@ -1025,6 +1082,7 @@ window.__ModuleLoader__.load({
             title: ws.path,
             open: open,
             activity: wsActivity(ws),
+            onFolderClick: function () { openSessionList({ title: (label || ws.title || ws.path), wsIds: wsIdsOf([ws]) }) },
             style: { '--sbw-indent': (depth * 12) + 'px' },
             onClick: function () { toggleChild(key) },
             text: h('span', { className: 'sbw-text' },
@@ -1096,6 +1154,7 @@ window.__ModuleLoader__.load({
           title: node.path + ' · ' + countLeaves(node) + ' 个子工作区',
           open: open,
           activity: nodeActivity(node),
+          onFolderClick: function () { openSessionList({ title: node.name, wsIds: nodeWsIds(node) }) },
           style: indent,
           onClick: function () { toggleChild(key) },
           text: h('span', { className: 'sbw-text' }, h('span', { className: 'sbw-title' }, node.name)),
@@ -1210,6 +1269,7 @@ window.__ModuleLoader__.load({
               open: open,
               color: project.color,
               activity: wsActivity(ws),
+              onFolderClick: function () { openSessionList({ title: displayName(project.root, project.alias), wsIds: wsIdsOf([ws]) }) },
               style: { '--sbw-indent': '0px' },
               drag: projectDragProps(project),
               onClick: function () { toggleRoot(project.id) },
@@ -1238,6 +1298,10 @@ window.__ModuleLoader__.load({
             open: open,
             color: project.color,
             activity: rollupActivity(projectRollup(project)),
+            onFolderClick: function () {
+              const list = (project.children || []).map(function (item) { return item.ws }).concat(project.selfWs ? [project.selfWs] : [])
+              openSessionList({ title: displayName(project.name || project.root, project.alias), wsIds: wsIdsOf(list) })
+            },
             drag: projectDragProps(project),
             onClick: function () { if (!isRenaming) toggleRoot(project.id) },
             text: isRenaming
@@ -1576,6 +1640,12 @@ window.__ModuleLoader__.load({
       '.pw-row-wrap{flex-wrap:wrap}' +
       '.pw-preview{display:flex;align-items:center;gap:8px;height:32px;margin-top:10px;padding:0 10px;border-radius:var(--dsw-radius-md,12px);font-size:13px;color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--dsw-alias-state-business-primary,#4d6bfe) 10%,transparent)}' +
       '.pw-preview-dot{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary,#4d6bfe)}' +
+      '.pw-sess-list{max-height:min(46vh,420px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:4px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.2));border-radius:var(--dsw-radius-md,12px)}' +
+      '.pw-sess-row{display:flex;align-items:center;gap:8px;min-height:32px;padding:0 8px;border-radius:var(--dsw-radius-sm,8px);cursor:pointer}' +
+      '.pw-sess-row:hover{background:var(--dsw-alias-interactive-bg-hover)}' +
+      '.pw-sess-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-state-business-primary,#4d6bfe)}' +
+      '.pw-sess-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px}' +
+      '.pw-sess-time{flex:none;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
       '.pw-footer{flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}' +
       '.pw-footer-actions{display:flex;align-items:center;gap:8px}'
     const CSS = SIDEBAR_CSS + DIALOG_CSS
@@ -2033,6 +2103,66 @@ window.__ModuleLoader__.load({
       )
     }
 
+    // 一个目录下的会话列表：侧边栏里滚起来费劲时，点文件夹图标直接摊开成弹窗
+    function SessionListDialog(props) {
+      ensureStyle()
+      const pair = useSessionListSeed()
+      const seed = pair[0]
+      const setSeed = pair[1]
+      const snapshot = useSnapshot(props.services.sessions.list)
+      const [query, setQuery] = useState('')
+      useEffect(function () { setQuery('') }, [seed])
+      if (!seed) return null
+      const wanted = seed.wsIds || []
+      const all = (snapshot.items || []).filter(function (item) {
+        if (!wanted.length) return true
+        return wanted.map(String).indexOf(String(item.workspaceId)) >= 0
+      })
+      const needle = query.trim().toLowerCase()
+      const list = needle
+        ? all.filter(function (item) { return sessionLabel(item).toLowerCase().indexOf(needle) >= 0 })
+        : all
+      const sorted = list.slice().sort(function (a, b) { return sessionStamp(b) - sessionStamp(a) })
+      function close() { setSeed(null) }
+      return h('div', { className: 'pw-modal', onClick: close },
+        h('div', { className: 'pw-modal-card', onClick: function (e) { e.stopPropagation() } },
+          h('div', { className: 'pw-modal-head' },
+            h('div', null,
+              h('h3', { className: 'pw-modal-title' }, seed.title || '会话'),
+              h('div', { className: 'pw-modal-sub' }, all.length + ' 个会话' + (needle ? '，匹配 ' + list.length + ' 个' : ''))
+            ),
+            h('button', { className: 'pw-close', title: '关闭', onClick: close }, glyph('IconCloseOutlineRegular', 16, '\u00D7'))
+          ),
+          h('div', { className: 'pw-field' },
+            h('input', {
+              className: 'pw-input',
+              autoFocus: true,
+              value: query,
+              placeholder: '过滤会话名称',
+              onChange: function (e) { setQuery(e.target.value) },
+              onKeyDown: function (e) { if (e.key === 'Escape') { e.preventDefault(); close() } },
+            })
+          ),
+          all.length
+            ? h('div', { className: 'pw-sess-list' }, sorted.length
+              ? sorted.map(function (item) {
+                return h('div', {
+                  key: String(item.id),
+                  className: 'pw-sess-row',
+                  title: sessionLabel(item),
+                  onClick: function () { props.services.uiWorkspace.openSession(item.id); close() },
+                },
+                  h('span', { className: 'pw-sess-dot' }),
+                  h('span', { className: 'pw-sess-title' }, sessionLabel(item)),
+                  h('span', { className: 'pw-sess-time' }, formatRelative(sessionStamp(item)))
+                )
+              })
+              : h('div', { className: 'pw-muted' }, '没有匹配的会话'))
+            : h('div', { className: 'pw-muted' }, '这个目录下还没有会话')
+        )
+      )
+    }
+
     function OverlayHost(props) {
       const createPair = useCreateDialogSeed()
       const editPair = useEditDialogSeed()
@@ -2087,7 +2217,7 @@ window.__ModuleLoader__.load({
           })
         }
       }
-      return h(React.Fragment, null, dialog, h(CommandPalette, { services: props.services }), h(CompletionToasts, { services: props.services }))
+      return h(React.Fragment, null, dialog, h(SessionListDialog, { services: props.services }), h(CommandPalette, { services: props.services }), h(CompletionToasts, { services: props.services }))
     }
 
     // 会话完成提示条：右下角堆叠，6 秒自动消失，点击打开对应会话
