@@ -439,6 +439,7 @@ window.__ModuleLoader__.load({
       const [openRoots, setOpenRoots] = useState({})
       const [openChildren, setOpenChildren] = useState({})
       const [moreOpen, setMoreOpen] = useState({})
+      const [cardDirs, setCardDirs] = useState({})
       const [error, setError] = useState('')
       const [loaded, setLoaded] = useState(false)
       const [renaming, setRenaming] = useState('')
@@ -1457,9 +1458,73 @@ window.__ModuleLoader__.load({
         subs: { display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '2px 8px 6px 14px', minWidth: '0' },
         chip: { display: 'inline-flex', alignItems: 'center', gap: '4px', height: '20px', padding: '0 6px', border: '0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.24))', borderRadius: '999px', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', fontFamily: 'inherit', fontSize: '11px', lineHeight: 1, cursor: 'pointer', maxWidth: '100%', minWidth: '0' },
         sessList: { display: 'flex', flexDirection: 'column', gap: '1px', padding: '0 2px', minWidth: '0' },
+        tree: { display: 'flex', flexDirection: 'column', gap: '1px', padding: '2px 6px 4px 6px', minWidth: 0 },
+        dirRow: { display: 'flex', alignItems: 'center', gap: '6px', minHeight: '26px', padding: '0 6px', borderRadius: '6px', cursor: 'pointer', minWidth: 0, color: 'var(--dsw-alias-label-secondary)' },
+        dirName: { flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12.5px', lineHeight: '18px' },
+        dirCount: { flex: 'none', fontSize: '11px', lineHeight: '16px', color: 'var(--dsw-alias-label-tertiary)' },
         mini: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', padding: 0, border: 'none', background: 'transparent', borderRadius: '6px', color: 'inherit', cursor: 'pointer', flex: 'none' },
         more: { display: 'block', width: '100%', textAlign: 'left', padding: '4px 8px 6px 14px', border: 'none', background: 'transparent', color: 'var(--dsw-alias-label-tertiary)', fontFamily: 'inherit', fontSize: '11.5px', cursor: 'pointer', borderRadius: '8px' },
       }
+      // 卡片里的目录树：完全按相对项目根的路径分层，不再像旧实现那样压平
+      function cardTree(project) {
+        const root = { name: project.name || project.root, path: project.path || project.root, children: new Map(), item: null }
+        for (const item of project.children) {
+          const segs = relSegments(project.path || project.root, item.child.path)
+          if (!segs.length) continue
+          let node = root
+          for (let i = 0; i < segs.length; i++) {
+            const key = segs[i]
+            if (!node.children.has(key)) node.children.set(key, { name: key, path: item.child.path, children: new Map(), item: null })
+            node = node.children.get(key)
+            if (i === segs.length - 1) node.item = item
+          }
+        }
+        return root
+      }
+      function cardTreeCount(node) {
+        let total = node.item ? 1 : 0
+        for (const child of node.children.values()) total += cardTreeCount(child)
+        return total
+      }
+      function cardTreeSessions(node) {
+        if (node.item && node.item.ws) return sessionIdsOf(node.item.ws).length
+        let total = 0
+        for (const child of node.children.values()) total += cardTreeSessions(child)
+        return total
+      }
+
+      function cardDirRow(node, key, level, project) {
+        const hasKids = node.children.size > 0
+        const open = cardDirs[key] === true
+        const label = displayName(node.name, node.item && node.item.child ? node.item.child.alias : '')
+        const state = node.item && node.item.ws ? wsActivity(node.item.ws) : null
+        const rows = [
+          h('div', {
+            key: key,
+            className: 'sbw-card-dir' + (state ? ' has-' + state : ''),
+            style: Object.assign({}, CARD_STYLE.dirRow, { paddingLeft: (6 + level * 12) + 'px' }),
+            title: withActivity(label + ' · ' + node.path, state),
+            onClick: function (e) {
+              e.stopPropagation()
+              if (hasKids) setCardDirs(function (prev) { return Object.assign({}, prev, { [key]: !open }) })
+              else if (node.item && node.item.ws) openSessionList({ title: label, wsIds: wsIdsOf([node.item.ws]) })
+            },
+          },
+            hasKids
+              ? h('span', { className: 'sbw-card-tri', style: { flex: 'none', width: '10px', color: 'var(--dsw-alias-label-tertiary)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 120ms ease' } }, glyph('IconTriangleRightFillRegular', 10, '▸'))
+              : h('span', { style: { flex: 'none', width: '10px' } }),
+            h('span', { style: { flex: 'none', color: 'var(--dsw-alias-label-tertiary)' } }, glyph(open ? 'IconFolderOpenRegular' : 'IconFolderCloseRegular', 14, '▤')),
+            h('span', { className: 'sbw-card-dir-name', style: CARD_STYLE.dirName }, label),
+            state ? statusDot(state) : null,
+            h('span', { style: CARD_STYLE.dirCount }, String(cardTreeCount(node)))
+          ),
+        ]
+        if (open && hasKids) {
+          for (const entry of node.children) rows.push(cardDirRow(entry[1], key + '/' + entry[0], level + 1, project))
+        }
+        return rows
+      }
+
       function projectCard(project) {
         const open = needle ? true : isRootOpen(project.id)
         const rollup = projectRollup(project)
@@ -1554,20 +1619,13 @@ window.__ModuleLoader__.load({
           ),
           open
             ? h('div', { className: 'sbw-card-body' },
-              subs.length > 1
-                ? h('div', { className: 'sbw-card-subs', style: CARD_STYLE.subs }, subs.map(function (item) {
-                  const state = wsActivity(item.ws)
-                  return h('button', {
-                    key: 'chip:' + project.id + ':' + item.child.path,
-                    className: 'sbw-chip' + (state ? ' act-' + state : ''),
-                    style: CARD_STYLE.chip,
-                    title: withActivity(displayName(item.child.name, item.child.alias) + ' · ' + (item.ws ? item.ws.path : item.child.path), state),
-                    onClick: function (e) {
-                      e.stopPropagation()
-                      openSessionList({ title: displayName(item.child.name, item.child.alias), wsIds: wsIdsOf([item.ws]) })
-                    },
-                  }, statusDot(state || 'idle'), h('span', { className: 'sbw-chip-t' }, displayName(item.child.name, item.child.alias)))
-                }))
+              project.children && project.children.length
+                ? h('div', { className: 'sbw-card-tree', style: CARD_STYLE.tree }, (function () {
+                  const tree = cardTree(project)
+                  const rows = []
+                  for (const entry of tree.children) rows.push(cardDirRow(entry[1], 'cd:' + project.id + '/' + entry[0], 0, project))
+                  return rows
+                })())
                 : null,
               shown.length
                 ? h('div', { className: 'sbw-card-sessions', style: CARD_STYLE.sessList }, shown.map(function (item) { return cardSessionRow(item, 'cs:' + project.id + ':' + item.id) }))
