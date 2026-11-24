@@ -1504,7 +1504,7 @@ window.__ModuleLoader__.load({
                 },
               }, glyph('IconNewChatOutlineRegular', 14, '＋')),
               h('button', {
-                className: 'sbw-mini',
+                className: 'sbw-mini sbw-opt',
                 title: '编辑名称 / 别名 / 标签 / 颜色',
                 onClick: function (e) { e.stopPropagation(); openEditDialog({ projectId: project.id, path: project.path }) },
               }, glyph('IconEditOutlineRegular', 14, '✎')),
@@ -2220,8 +2220,23 @@ window.__ModuleLoader__.load({
       '.sbw-card-more{display:flex;align-items:center;gap:4px;width:100%;height:26px;margin-top:2px;padding:0 8px 0 20px;border:none;background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:11.5px;cursor:pointer;border-radius:var(--dsw-radius-sm,8px)}',
       '.sbw-card-more:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.sbw-card-empty{padding:6px 8px 8px 20px;font-size:11.5px;color:var(--dsw-alias-label-tertiary)}',
-      '.sbw-rail .sbw-card{display:none}'
+      '.sbw-rail .sbw-card{display:none}',
+      // 防御性收口：任何情况下都不让卡片内容把侧边栏横向撑破
+      '.sbw-card,.sbw-card *{box-sizing:border-box}',
+      '.sbw-card{min-width:0;width:100%;max-width:100%}',
+      '.sbw-card-hd{min-width:0;overflow:hidden}',
+      '.sbw-card-name{max-width:100%}',
+      '.sbw-card-tools{flex:none;max-width:96px;overflow:hidden}',
+      '.sbw-card-tools .sbw-mini.sbw-opt{display:none !important}',
+      '.sbw-card-hd:hover .sbw-card-tools .sbw-mini.sbw-opt{display:inline-flex !important}',
+      '.sbw-card-meta{overflow:hidden}',
+      '.sbw-card-path{max-width:62%}',
+      '.sbw-card-meta .sbw-tags{max-width:38%;overflow:hidden;display:inline-flex;gap:4px}',
+      '.sbw-card-subs{overflow:hidden}',
+      '.sbw-chip{min-width:0}',
+      '.sbw-list > *{min-width:0;max-width:100%}'
     ]
+
     const TABS_CSS = [
       '.pwt-band{box-sizing:border-box;z-index:40;display:flex;align-items:center;height:38px;padding:0 14px;gap:10px;background:var(--dsw-alias-bg-base,#fff);border-bottom:0.5px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
       '.pwt-probe{position:absolute;width:1px;height:1px;pointer-events:none;opacity:0}',
