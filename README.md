@@ -1,11 +1,13 @@
 # dsh-project-workspaces
 
-[DeepSeek Harness](https://github.com/deepseek-ai) 插件：一个插件搞定「项目 → 子工作区」——把项目根目录下的直接子目录注册成 DSH 原生 Workspace，记录项目层级，并**用侧边栏替换掉原生左侧工作区区域**（项目 → 子工作区 → 会话），标题栏的 `＋` 就是「新建项目」弹窗。
+**不再接管左侧工作区栏**（`sidebar.workspaces`）——左侧保持 DSH 原生实现。
 
-- 宿主半边（`lib/index.js`）：`DSH_HOME/project-workspaces.json` 里的层级 + `/dsh-project-workspaces/*` HTTP 路由
-- 客户端半边（`client/client.js`）：`sidebar.workspaces`（priority -100）、`settings.section`（设置 → 项目工作区）、`shell.overlay`（新增工作区 / 编辑弹窗）
+本插件现在只提供三样东西：
 
-- **会话标签条（独立一条）**：对话区最上方单独一条，把最近打开的会话排成标签；点击切换、hover 出现 `×` 只从标签栏移除（不归档/不删除会话）；末尾 `≡` 或 `Ctrl+K` 打开会话搜索面板。真实标题栏会被整体下移 36px（`marginTop`），标签最多 8 个、按最近使用排序、持久化在 `localStorage` 的 `dsh-project-workspaces:tabs`
+1. **顶部会话标签条**（`conversation.header.leading`）：最近打开的会话排一行，点击切换、hover 出现 `×` 只从标签栏移除、末尾 `≡` / `Ctrl+K` 打开会话搜索；最多 8 个，存在 `localStorage`
+2. **设置 → 项目工作区**：新建/编辑项目、别名、标签、颜色、打开目录、按父目录归组、会话归属补齐
+3. **新建/编辑项目弹窗**：选根目录、递归扫描子目录、勾选后把子目录注册成 DSH 原生 Workspace
+
 
 ## 安装
 

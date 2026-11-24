@@ -3549,17 +3549,8 @@ window.__ModuleLoader__.load({
       const workspaces = ctx.get('workspaces')
       const uiWorkspace = ctx.get('uiWorkspace')
       const services = { uiWorkspace: uiWorkspace, workspaces: workspaces, sessions: sessions }
-      if (sessions && workspaces) {
-        ctx.slots.inject('sidebar.workspaces', function () {
-          return ctx.slots.register({
-            name: 'sidebar.workspaces',
-            priority: -100,
-            inject: function () { return { sessions: sessions, workspaces: workspaces, uiWorkspace: uiWorkspace } },
-          }, function (props) {
-            return h(SidebarBrowser, Object.assign({}, props, { sessions: sessions, workspaces: workspaces, uiWorkspace: uiWorkspace }))
-          })
-        })
-      }
+      // 不再接管原生工作区栏（sidebar.workspaces），左侧保持 DSH 原生实现。
+      // 本插件只提供：顶部会话标签条、设置页「项目工作区」面板、新建/编辑项目弹窗。
       ctx.slots.inject('settings.section', function () {
         return ctx.slots.register({
           name: 'settings.section',

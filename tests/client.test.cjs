@@ -104,65 +104,10 @@ function stubFetch(state) {
   })
 }
 
-test('注册了侧边栏、设置面板、overlay 与标签条四个槽位', () => {
+test('注册了标签条、设置面板与 overlay 三个槽位', () => {
   const env = makeEnv()
   const names = env.registered.map((r) => r.name).sort()
-  assert.deepEqual(names, ['conversation.header.leading', 'settings.section', 'shell.overlay', 'sidebar.workspaces'])
-  assert.equal(env.sidebar.options.priority, -100, '侧边栏必须以 -100 抢占原生槽位')
-})
-
-test('Windows 绝对路径在卡片里被截断成 …/父/子', async () => {
-  const sessions = [{ id: 's1', sessionId: 's1', title: '会话一', workspaceId: 'w-web' }]
-  const workspaces = [{ id: 'w-web', workspaceId: 'w-web', path: PROJECT_STATE.projects[0].children[0].path, title: 'web', sessionIds: ['s1'] }]
-  const env = makeEnv({ sessions, workspaces })
-  global.fetch = stubFetch(PROJECT_STATE)
-  const renderer = mountSidebar(env)
-  await flush()
-  const paths = findByClass(renderer, 'sbw-card-path')
-  assert.ok(paths.length > 0, '卡片应渲染路径行')
-  const text = JSON.stringify(paths.map((p) => p.props.children))
-  assert.ok(!text.includes('devsoftware'), '不应出现完整绝对路径：' + text)
-  assert.ok(text.includes('…/'), '应显示 …/ 形式的短路径：' + text)
-  assert.ok(findByClass(renderer, 'sbw-card')[0], '卡片容器应存在')
-})
-
-test('目录树默认展开第一层，点击可收起（防回归：提前 return 导致子节点不渲染）', async () => {
-  const NESTED = Object.assign({}, PROJECT_STATE, { projects: [Object.assign({}, PROJECT_STATE.projects[0], { children: [
-    { name: 'public', path: PROJECT_STATE.projects[0].path + '\\public', alias: '', tags: [], registered: false, workspaceId: '', sessionCount: 0 },
-    { name: 'web', path: PROJECT_STATE.projects[0].path + '\\public\\web', alias: '', tags: [], registered: true, workspaceId: 'w-web', sessionCount: 1 },
-  ] })] })
-  const env = makeEnv()
-  global.fetch = stubFetch(NESTED)
-  const renderer = mountSidebar(env)
-  await flush()
-  const dirs = findByClass(renderer, 'sbw-card-dir')
-  assert.equal(dirs.length, 2, '第一层默认展开，应看到 public 与 web 两行，实际 ' + dirs.length)
-  const before = findByClass(renderer, 'sbw-card-dir').length
-  TR.act(() => { dirs[0].props.onClick({ stopPropagation() {}, preventDefault() {}, currentTarget: {} }) })
-  await flush()
-  const collapsed = findByClass(renderer, 'sbw-card-dir').length
-  assert.ok(collapsed < before, '点 public 应收起子层，before=' + before + ' collapsed=' + collapsed)
-  const again = findByClass(renderer, 'sbw-card-dir')[0]
-  TR.act(() => { again.props.onClick({ stopPropagation() {}, preventDefault() {}, currentTarget: {} }) })
-  await flush()
-  assert.equal(findByClass(renderer, 'sbw-card-dir').length, before, '再次点击应恢复展开')
-})
-
-test('卡片里的会话可以归档，调用 uiWorkspace.archiveSession', async () => {
-  const sessions = [{ id: 's1', sessionId: 's1', title: '会话一', workspaceId: 'w-web' }]
-  const workspaces = [{ id: 'w-web', workspaceId: 'w-web', path: PROJECT_STATE.projects[0].children[0].path, title: 'web', sessionIds: ['s1'] }]
-  const env = makeEnv({ sessions, workspaces })
-  global.fetch = stubFetch(PROJECT_STATE)
-  const archived = env.archived
-  const renderer = mountSidebar(env)
-  await flush()
-  const rows = findByClass(renderer, 'sbw-card-sess')
-  assert.ok(rows.length > 0, '卡片应渲染会话行')
-  const btn = rows[0].findAll((n) => n.props && n.props.title === '归档这个会话')[0]
-  assert.ok(btn, '会话行应有归档按钮')
-  TR.act(() => { btn.props.onClick({ stopPropagation() {}, preventDefault() {}, currentTarget: {} }) })
-  await flush()
-  assert.deepEqual(archived, ['s1'])
+  assert.deepEqual(names, ['conversation.header.leading', 'settings.section', 'shell.overlay'])
 })
 
 test('会话标签条：打开会话后出现标签，点 × 移除', async () => {
@@ -238,9 +183,3 @@ test('会话列表弹窗：原生快照只有 {ids, byId} 没有 items 时也要
   assert.equal(findByClass(overlay, 'pw-sess-row').length, 1, 'ids/byId 形态的快照也应列出 1 条会话')
 })
 
-test('挂载时没有可用布局祖先也不会抛错（防回归：量高逻辑崩溃）', async () => {
-  const env = makeEnv()
-  global.fetch = stubFetch(PROJECT_STATE)
-  assert.doesNotThrow(() => mountSidebar(env, { sessions: [], workspaces: [] }))
-  await flush()
-})
