@@ -1594,12 +1594,21 @@ window.__ModuleLoader__.load({
             }
             el = parent
           }
-          if (root.parentElement && root.parentElement.classList.contains('sbw-region')) {
-            // 交给 grid 行（1fr）撑开，别留下手工算出的 min/maxHeight，否则会把列表卡死
+          const region = root.parentElement
+          if (region && region.classList.contains('sbw-region')) {
+            // grid 行已经给了 1fr，但保险起见再按 region 的底边封一次顶：
+            // 这样无论 flex 高度能否解析，列表区都能收缩并滚动。
             if (root.style.minHeight) root.style.minHeight = ''
             if (root.style.height) root.style.height = ''
-            if (root.style.maxHeight) root.style.maxHeight = ''
             if (box.style.maxHeight) box.style.maxHeight = ''
+            try {
+              const regionRect = region.getBoundingClientRect()
+              if (regionRect && regionRect.bottom > 0) {
+                const capped = Math.max(140, Math.round(regionRect.bottom - rect.top - 6))
+                if (root.style.maxHeight !== capped + 'px') root.style.maxHeight = capped + 'px'
+                if (root.style.overflow !== 'hidden') root.style.overflow = 'hidden'
+              }
+            } catch (err) { /* 拿不到几何就不封顶，交给 grid 行 */ }
             debugFit.total = 0
             debugFit.limit = Math.round(limit)
             debugFit.top = Math.round(rect.top)
