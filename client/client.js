@@ -855,6 +855,7 @@ window.__ModuleLoader__.load({
       function openSession(id) {
         setError('')
         setLastPicked(String(id || ''))
+        noteOpened(id)
         try {
           if (uiWorkspace && typeof uiWorkspace.openSession === 'function') uiWorkspace.openSession(id)
           else if (sessions && typeof sessions.open === 'function') sessions.open(id)
@@ -2002,7 +2003,7 @@ window.__ModuleLoader__.load({
     '.pw-cmd-label{flex:none;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}' +
     '.pw-cmd-hint{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}' +
     '.pw-cmd-empty{padding:14px 10px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}' +
-    '.pw-toasts{position:fixed;top:calc(env(titlebar-area-height, 38px) + 12px);right:calc(env(titlebar-area-x, 0px) + 16px);display:flex;flex-direction:column;gap:8px;z-index:2147483000;pointer-events:none}' +
+    '.pw-toasts{position:fixed;top:calc(env(titlebar-area-height, 38px) + 12px + var(--sbw-band-h, 0px));right:calc(env(titlebar-area-x, 0px) + 16px);display:flex;flex-direction:column;gap:8px;z-index:2147483000;pointer-events:none}' +
     '.pw-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:8px;min-width:220px;max-width:320px;padding:10px 12px;border:0.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.28));border-radius:var(--dsw-radius-md,12px);background:var(--dsw-alias-bg-layer-1,#fff);box-shadow:0 8px 24px rgba(0,0,0,.16);cursor:pointer}' +
     '.pw-toast{animation:pw-toast-in .16s ease-out}' +
     '@keyframes pw-toast-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}' +
@@ -2985,6 +2986,15 @@ window.__ModuleLoader__.load({
       )
     }
       // ── 右侧顶部会话标签条：最近打开的会话排成一行，点一下切过去 ──
+      const LAST_KEY = 'dsh-project-workspaces:last'
+      let lastOpenedId = ''
+      try { lastOpenedId = String((window.localStorage && window.localStorage.getItem(LAST_KEY)) || '') } catch (err) { lastOpenedId = '' }
+      function noteOpened(id) {
+        const value = String(id || '')
+        if (!value) return
+        lastOpenedId = value
+        try { if (window.localStorage) window.localStorage.setItem(LAST_KEY, value) } catch (err) { void err }
+      }
       const TABS_KEY = 'dsh-project-workspaces:tabs'
       const MAX_TABS = 8
       const BAND_HEIGHT = 36
@@ -3009,9 +3019,10 @@ window.__ModuleLoader__.load({
         }
         const activeId = String((snap && (snap.activeSessionId || snap.currentSessionId || snap.selectedSessionId
           || snap.activeId || snap.selectedId
-          || (snap.active && snap.active.id) || (snap.current && snap.current.id))) || '')
+          || (snap.active && snap.active.id) || (snap.current && snap.current.id))) || '') || lastOpenedId
         const [order, setOrder] = useState(readTabs)
         const [box, setBox] = useState(null)          // { left, top, width, header }
+        const [inlineFallback, setInlineFallback] = useState(false)
         const probeRef = React.useRef(null)
         const listRef = React.useRef(null)
         useEffect(function () {
@@ -3023,28 +3034,43 @@ window.__ModuleLoader__.load({
             return next
           })
         }, [activeId])
-        // 量出标题栏的位置：标签条贴到它正上方，并把标题栏整体下移，形成独立一条
+        // 让标题栏让出 38px，再把标签条贴到它正上方（先推再量，避免量到旧位置）
         useEffect(function () {
+          let headerEl = null
+          let previousMargin = ''
           function measure() {
             const node = probeRef.current
             if (!node || typeof node.getBoundingClientRect !== 'function') return
-            const rect = node.getBoundingClientRect()
-            if (!rect || !rect.width) return
+            const rect0 = node.getBoundingClientRect()
+            if (!rect0) return
             let best = node.parentElement
             let cur = node.parentElement
             for (let i = 0; i < 6 && cur && cur.parentElement; i += 1) {
               const rr = cur.getBoundingClientRect()
               if (!rr || rr.height > 98) break
-              if (rr.width > rect.width + 4) best = cur
+              if (rr.width > rect0.width + 4) best = cur
               cur = cur.parentElement
             }
             const header = best || node.parentElement
-            if (!header || typeof header.getBoundingClientRect !== 'function') return
+            if (!header || !header.style) return
+            if (header !== headerEl) {
+              if (headerEl) { try { headerEl.style.marginTop = previousMargin || '' } catch (err) { void err } }
+              headerEl = header
+              previousMargin = header.style.marginTop
+            }
+            header.style.marginTop = BAND_HEIGHT + 'px'
             const hr = header.getBoundingClientRect()
+            if (!hr || !hr.width) return
             setBox({ left: Math.round(hr.left), top: Math.round(hr.top), width: Math.round(hr.width), header: header })
+            try { document.documentElement.style.setProperty('--sbw-band-h', BAND_HEIGHT + 'px') } catch (err) { void err }
           }
           measure()
           const timer = setTimeout(measure, 80)
+          const timer2 = setTimeout(function () {
+            measure()
+            // 量不出来时退回「就地一条」，至少保证能看见能切
+            setBox(function (prev) { if (!prev) setInlineFallback(true); return prev })
+          }, 400)
           function onResize() { measure() }
           window.addEventListener('resize', onResize)
           let observer = null
@@ -3056,17 +3082,13 @@ window.__ModuleLoader__.load({
           } catch (err) { void err }
           return function () {
             clearTimeout(timer)
+            clearTimeout(timer2)
             window.removeEventListener('resize', onResize)
             if (observer) { try { observer.disconnect() } catch (err) { void err } }
+            if (headerEl) { try { headerEl.style.marginTop = previousMargin || '' } catch (err) { void err } }
+            try { document.documentElement.style.removeProperty('--sbw-band-h') } catch (err) { void err }
           }
         }, [])
-        useEffect(function () {
-          const header = box && box.header
-          if (!header || !header.style) return undefined
-          const previous = header.style.marginTop
-          header.style.marginTop = BAND_HEIGHT + 'px'
-          return function () { header.style.marginTop = previous || '' }
-        }, [box])
         function drop(id) {
           setOrder(function (prev) {
             const next = prev.filter(function (x) { return x !== id })
@@ -3078,9 +3100,10 @@ window.__ModuleLoader__.load({
           try { window.dispatchEvent(new CustomEvent('dsh-project-workspaces:open-palette')) } catch (err) { void err }
         }
         const list = order.filter(function (id) { return summaries[id] })
+        if (!list.length) return h('span', { ref: probeRef, className: 'pwt-probe' })
         const style = box
           ? { left: box.left + 'px', top: (box.top - BAND_HEIGHT) + 'px', width: box.width + 'px', position: 'fixed' }
-          : { position: 'absolute', left: '-9999px', top: '0px', width: '520px' }
+          : (inlineFallback ? { position: 'relative', width: '100%' } : { position: 'absolute', left: '-9999px', top: '0px', width: '520px' })
         return h('div', { className: 'pwt-band', style: style },
           h('span', { ref: probeRef, className: 'pwt-probe' }),
           list.length
@@ -3103,6 +3126,7 @@ window.__ModuleLoader__.load({
                       className: 'pwt-hit',
                       onClick: function (e) {
                         e.stopPropagation()
+                        noteOpened(id)
                         if (services.uiWorkspace && typeof services.uiWorkspace.openSession === 'function') services.uiWorkspace.openSession(id)
                       },
                     }, h('span', { className: 'pwt-t' }, sessionLabel(summaries[id]))),
