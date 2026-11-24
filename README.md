@@ -106,7 +106,7 @@ npm install --save "dsh-project-workspaces@link:<plugins-dir>/dsh-project-worksp
 - **标签筛选**：标题栏下方把项目与子目录的标签做成 chip，点一个只看带该标签的项目，再点取消
 - **Ctrl / Cmd + K 快速跳转**：任意位置按下即弹出命令面板，输入几个字筛项目 / 子工作区 / 工作区 / 会话，↑↓ 选择、回车直接打开
 
-- **会话完成提示**：侧边栏订阅槽位给的 `useSessionStatus`（它的快照是 `ReadonlyMap<SessionId, { running, pendingInteraction, completionUnread }>`），当某个会话的 `completionUnread` 由 false 变 true（跑完且不在主视图）时右下角浮出提示条（`已完成`，绿色对勾）；`pendingInteraction` 出现时浮出橙色提示（`等待你处理`）。提示条 6 秒自动消失，点击直接打开该会话，同一会话只保留最新一条
+- **会话完成提示**：侧边栏订阅槽位给的 `useSessionStatus`（它的快照是 `ReadonlyMap<SessionId, { running, pendingInteraction, completionUnread }>`），当某个会话**从「正在回答」变成空闲**（或 `completionUnread` 由 false 变 true）时右上角浮出提示条（`已完成`，绿色对勾）；`pendingInteraction` 出现时浮出橙色提示（`等待你处理`）。提示条 10 秒自动消失，鼠标悬停时不消失，点击直接打开该会话，同一会话只保留最新一条
 - **会话重命名**：会话行 hover 出 `✎`，就地变成输入框，回车保存 / Esc 取消；走原生 `SessionFace.rename`（`sessions.using(id, { source: 'workspaceOperation' }, ref => ref.binding.session.rename(title))`），成功后侧边栏与原生列表同步更新
 - **同父目录自动合并**：子工作区按相对项目根的路径分段聚成树，`public/web`、`public/page` 只出现一个 `public` 节点（右侧显示子工作区数量）
 - **会话折叠**：单个工作区最多铺 6 行会话，多出来折成「还有 N 个会话」（展开后可「收起会话」），搜索命中时不受折叠限制
