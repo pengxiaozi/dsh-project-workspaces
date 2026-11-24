@@ -52,7 +52,7 @@ window.__ModuleLoader__.load({
       '.sbw-search input{flex:1;width:0;min-width:0;border:none;outline:none;background:transparent;font-family:inherit;font-size:13px;line-height:18px;color:var(--dsw-alias-label-primary)}',
       '.sbw-search input::placeholder{color:var(--dsw-alias-label-tertiary)}',
       '.sbw-scroll{flex:1;min-height:0;display:flex;flex-direction:column}',
-      '.sbw-wide .sbw-scroll{display:block;flex:1 1 auto;min-height:0;max-height:100%;-webkit-overflow-scrolling:touch;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
+      '.sbw-wide .sbw-scroll{display:block;flex:1 1 auto;min-height:0;max-height:none;-webkit-overflow-scrolling:touch;margin-left:-4px;margin-right:calc(2px - var(--dsh-sidebar-inline-padding,8px));padding-left:4px;padding-right:calc(var(--dsh-sidebar-inline-padding,8px) - var(--dsh-scrollbar-width,8px) - 2px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}',
       '.sbw-wide .sbw-scroll{touch-action:pan-y}',
       '.sbw-skel{padding:2px 8px}',
       '.sbw-skel-row{display:flex;align-items:center;gap:8px;height:32px;padding-left:calc(var(--dsh-sidebar-row-padding,12px) - 3px)}',
@@ -1468,8 +1468,22 @@ window.__ModuleLoader__.load({
             el = parent
           }
           const bottomGap = 10
+          // 关键：把整个面板的高度钉死到「侧边栏区域还剩下的高度」。
+          // 只设滚动区 maxHeight 的话，面板本身仍按内容撑开：项目少的时候下面会留一大块空白，
+          // 项目多的时候滚动区又被父级裁掉，看着就是「高度不对」。
+          const root = rootRef.current
+          if (root && typeof root.getBoundingClientRect === 'function') {
+            const rootRect = root.getBoundingClientRect()
+            if (rootRect && typeof rootRect.top === 'number') {
+              const total = Math.max(160, Math.round(limit - rootRect.top - bottomGap))
+              if (total > 0 && root.style.height !== total + 'px') {
+                root.style.height = total + 'px'
+                root.style.maxHeight = total + 'px'
+              }
+            }
+          }
           const available = Math.max(120, Math.round(limit - rect.top - bottomGap))
-          if (available > 0) box.style.maxHeight = available + 'px'
+          if (available > 0 && box.style.maxHeight !== available + 'px') box.style.maxHeight = available + 'px'
         }
         fit()
         const timer = setTimeout(fit, 60)
@@ -2019,7 +2033,7 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState('')
       const target = child ? child.path : project.path
       const base = child ? child.name : (project.name || project.root)
-      const parsedTags = String(tags || '').split(/[,\uFF0C;\uFF1B]/).map(function (tag) { return tag.trim() }).filter(Boolean)
+      const parsedTags = String(tags || '').split(/[,\uFF0C;\uFF1B\u3001|]/).map(function (tag) { return tag.trim() }).filter(Boolean)
       const preview = displayName(base, alias)
       async function openFolder() {
         try { await postJson(API.open, { path: target }) } catch (err) { setError(errorText(err)) }
